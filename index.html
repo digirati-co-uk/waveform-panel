@@ -11,6 +11,7 @@
 <script type="module" src="./src/index.ts"></script>
 
 <waveform-panel
+  id="waveform"
   srcset="
     https://iiif-waveforms.s3.eu-west-2.amazonaws.com/vdc_100052359795.0x000018.dat https://api.bl.uk/metadata/iiif/ark:/81055/vdc_100052359795.0x000004,
     https://iiif-waveforms.s3.eu-west-2.amazonaws.com/vdc_100052359795.0x00001a.dat https://api.bl.uk/metadata/iiif/ark:/81055/vdc_100052359795.0x000005,
@@ -22,6 +23,19 @@
   current-time="1000"
   duration="7446.8"
 ></waveform-panel>
+
+<script>
+
+    const el = document.getElementById('waveform')
+    el.addEventListener('click-waveform', e => {
+        console.log('detail', e.detail)
+    })
+
+    setInterval(() => {
+        el.currentTime = Math.min(el.duration, el.currentTime + 1);
+    }, 1000)
+
+</script>
 
 </body>
 </html>

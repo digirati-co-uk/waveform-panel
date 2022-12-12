@@ -71,18 +71,6 @@ export class WaveformPanel extends HTMLElement {
     `;
     this.shadowRoot.appendChild(style);
 
-    // @todo This did not work..
-    // const { width, height } = this.getBoundingClientRect();
-    // const observer = new ResizeObserver(entries => {
-    //   for (const entry of entries) {
-    //     const contentBoxSize = Array.isArray(entry.contentBoxSize) ? entry.contentBoxSize[0] : entry.contentBoxSize;
-    //     console.log({ contentBoxSize });
-    //   }
-    //   console.log('changed?');
-    // })
-    //
-    // observer.observe(this);
-
     window.addEventListener('resize', this.resize);
 
     this.store = createWaveformStore({} as any);
@@ -110,6 +98,10 @@ export class WaveformPanel extends HTMLElement {
 
   get currentTime() {
     return this.store.getState().currentTime;
+  }
+
+  get duration() {
+    return this.store.getState().duration;
   }
 
   createEmptySVG() {
@@ -209,7 +201,6 @@ export class WaveformPanel extends HTMLElement {
 
     const waveform = sequence.waveform.data;
     const channel = waveform.channel(0);
-    const x = `${sequence.waveform.startPixel || 0}px`;
 
     const h = this.store.getState().dimensions.height * 1.5;
     const points = [];
@@ -226,12 +217,10 @@ export class WaveformPanel extends HTMLElement {
     const mappedPoints = points.map((p) => p.join(',')).join(' ');
     if (existing) {
       existing.setAttributeNS(null, 'points', mappedPoints);
-      // existing.setAttributeNS(null, 'x', x);
     } else {
       const polygon = makeSVGElement('polygon', {
         points: mappedPoints,
         fill: '#fff',
-        // style: `transform: translateX(${x})`,
         'data-sequence': sequence.id,
       });
       this.svgParts.waveforms.appendChild(polygon);
@@ -255,8 +244,6 @@ export class WaveformPanel extends HTMLElement {
     }
 
     if (this.invalidation.sequence) {
-      console.log('Invalidation of sequence');
-
       for (const seq of sequence) {
         this.addSequenceToSVG(seq);
       }
@@ -273,8 +260,9 @@ export class WaveformPanel extends HTMLElement {
       return;
     }
 
-    // console.log('render ->', this.store.getState());
     const hoverX = mouse.isHover ? Math.abs(~~((dimensions.width / duration) * hoverTime)) : 0;
+
+    // @todo make this configurable (sub pixel)
     const current = Math.abs(~~((dimensions.width / duration) * currentTime));
 
     this.svgParts.hover.setAttributeNS(null, 'width', `${hoverX}px`);
@@ -308,11 +296,44 @@ export class WaveformPanel extends HTMLElement {
         .getState()
         .setAttributes(this.initialAttributes)
         .then(() => {
-          console.log('initial store ->', this.store.getState());
+          //
         });
       this.initialAttributes = {};
       this.hasInitialised = true;
       this.resize();
+
+      this.addEventListener('click', (e) => {
+        e.preventDefault();
+
+        const { dimensions } = this.store.getState();
+        const target = { x: e.pageX - dimensions.pageX, y: e.pageY - dimensions.pageY };
+        this.store.setState((state) => {
+          const percent = Math.abs(target.x) / state.dimensions.width;
+          const time = state.duration * percent;
+
+          let t = 0;
+          let currentSequence;
+          for (const seq of state.sequence) {
+            currentSequence = seq;
+            if (time < t + seq.endTime - seq.startTime) {
+              break;
+            }
+            t += seq.endTime - seq.startTime;
+          }
+
+          this.dispatchEvent(
+            new CustomEvent('click-waveform', {
+              detail: { time, percent, target, currentSequence, sequenceTime: time - t },
+            })
+          );
+
+          this.setAttribute('current-time', `${time}`);
+
+          return {
+            currentTime: time,
+          };
+        });
+      });
 
       // Mouse move event.
       this.addEventListener('mousemove', (e) => {
@@ -361,7 +382,7 @@ export class WaveformPanel extends HTMLElement {
         .getState()
         .setAttributes({ [name]: newValue })
         .then(() => {
-          console.log('attributes set.', this.store.getState());
+          //
         });
     } else {
       this.initialAttributes[name] = newValue;
@@ -371,10 +392,6 @@ export class WaveformPanel extends HTMLElement {
   disconnectedCallback() {
     this.unsubscribe();
     window.removeEventListener('resize', this.resize);
-  }
-
-  adoptedCallback() {
-    console.log('element moved to new page.');
   }
 }
 
