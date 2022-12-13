@@ -1,0 +1,7 @@
+{
+  "sandboxes": [
+    "vanilla"
+  ],
+  "buildCommand": "prepublishOnly",
+  "node": "16"
+}
