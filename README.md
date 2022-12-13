@@ -36,7 +36,7 @@ import 'waveform-panel';
 
 or you can drop the script into any HTML page:
 ```html
-<script src="https://cdn.jsdelivr.net/npm/waveform-panel"></script>
+<script src="https://cdn.jsdelivr.net/npm/waveform-panel/dist/index.umd.js"></script>
 ```
 
 

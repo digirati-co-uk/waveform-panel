@@ -406,9 +406,9 @@ export class WaveformPanel extends HTMLElement {
 
       // Mouse out
       this.addEventListener('pointerleave', (e) => {
-        // this.store.setState((s) => ({
-        //   mouse: { ...s.mouse, isHover: false },
-        // }));
+        this.store.setState((s) => ({
+          mouse: { ...s.mouse, isHover: false },
+        }));
       });
 
       this.addEventListener('pointerdown', (e) => {
