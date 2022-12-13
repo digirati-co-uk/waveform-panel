@@ -1,18 +1,57 @@
 {
   "name": "waveform-panel",
   "version": "1.0.0",
-  "main": "index.js",
   "license": "MIT",
+  "main": "dist/bundle/cjs/index.js",
+  "module": "dist/bundle/esm/index.mjs",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "require": "./dist/bundle/cjs/index.js",
+      "import": "./dist/bundle/esm/index.mjs"
+    },
+    "./standalone": {
+      "require": "./dist/standalone/cjs/index.js",
+      "import": "./dist/standalone/esm/index.mjs"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "*": [
+        "dist/index.d.ts"
+      ],
+      "standalone": [
+        "dist/index.d.ts"
+      ]
+    }
+  },
   "scripts": {
     "start": "vite dev",
-    "build": "vite build"
+    "build": "vite build",
+    "prepublishOnly": "node ./scripts/build.mjs && node scripts/validate.mjs"
   },
   "devDependencies": {
-    "vite": "^3.2.5",
-    "prettier": "^2.8.1"
+    "@typescript-eslint/eslint-plugin": "^5.46.1",
+    "@typescript-eslint/parser": "^5.46.1",
+    "dts-bundle-generator": "^7.1.0",
+    "eslint-plugin-json": "^3.1.0",
+    "eslint-plugin-prettier": "^4.2.1",
+    "terser": "^5.16.1",
+    "chalk": "^5.2.0",
+    "execa": "^6.1.0",
+    "prettier": "^2.8.1",
+    "tslib": "^2.4.1",
+    "typescript": "^4.9.4",
+    "vite": "^3.2.5"
   },
   "dependencies": {
     "waveform-data": "^4.3.0",
     "zustand": "^4.1.5"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
