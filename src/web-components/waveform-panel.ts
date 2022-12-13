@@ -45,6 +45,7 @@ export class WaveformPanel extends HTMLElement {
     // language=CSS
     style.innerHTML = `
       :host {
+        display: block;
         --waveform-background: #000;
         --waveform-base: #8a9aa1;
         --waveform-hover: #14a4c3;
@@ -405,9 +406,9 @@ export class WaveformPanel extends HTMLElement {
 
       // Mouse out
       this.addEventListener('pointerleave', (e) => {
-        this.store.setState((s) => ({
-          mouse: { ...s.mouse, isHover: false },
-        }));
+        // this.store.setState((s) => ({
+        //   mouse: { ...s.mouse, isHover: false },
+        // }));
       });
 
       this.addEventListener('pointerdown', (e) => {

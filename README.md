@@ -1,5 +1,7 @@
 # Waveform panel
 
+<img src="https://gist.githubusercontent.com/stephenwf/c8d727a69a2c5d958298c6621b95c4c9/raw/caa0d6c1e47f693a1fc1a9b2c14d9c38152688ab/waveform.svg" />
+
 A web component that can display simple waveforms or compositions and crops of multiple waveforms. It uses SVG to render
 the waveforms, with CSS variables for customising styling. It is interactive when hovering by default with simple
 events for scrubbing.
