@@ -1,7 +1,5 @@
-import { createWaveformStore, WaveformSequence, WaveformStore, WaveformStoreState } from '../store';
-import { parseWaveform } from '../helpers/parse-waveform';
+import { createWaveformStore, WaveformSequence, WaveformStore } from '../store';
 import WaveformData from 'waveform-data';
-import { trimSplit } from '../helpers/trim-spit';
 import { scaleY } from '../helpers/scale-y';
 import { makeSVGElement } from '../helpers/make-svg-element';
 
@@ -35,6 +33,7 @@ export class WaveformPanel extends HTMLElement {
     hover: SVGRectElement;
     buffered: SVGGElement;
   };
+  buffered?: Record<string, TimeRanges>;
   waveformCache: Record<string, WaveformData> = {};
 
   constructor() {
@@ -104,6 +103,48 @@ export class WaveformPanel extends HTMLElement {
     return this.store.getState().duration;
   }
 
+  lastBufferedStarts = [];
+
+  reseek(buffered?: Record<string, TimeRanges>) {
+    if (buffered) {
+      this.buffered = buffered;
+    }
+    if (this.buffered) {
+      // go through each sequence.
+      // figure out what parts of THAT sequence are buffered
+      // add those to the rect
+      // const newStarts = [];
+      // for (let i = 0; i < this.buffered.length; i++) {
+      //   const start = buffered.start(i);
+      //   const end = buffered.end(i);
+      //   newStarts.push(start);
+      //   const found = this.svgParts.buffered.querySelector(`[data-buffer-start="${start}"]`);
+      //   if (found) {
+      //     // Update found
+      //   } else {
+      //     makeSVGElement('rect', {
+      //       height: '100%',
+      //       width: '???',
+      //       'data-buffer-start': `${start}`,
+      //     });
+      //     // Create new
+      //   }
+      // }
+      //
+      // const toRemove = this.lastBufferedStarts.filter((x) => !newStarts.includes(x));
+      // for (const start of toRemove) {
+      //   const found = this.svgParts.buffered.querySelector(`[data-buffer-start="${start}"]`);
+      //   if (found) {
+      //     this.svgParts.buffered.removeChild(found);
+      //   }
+      // }
+      // for (const el of Array.from(this.svgParts.buffered.children)) {
+      //
+      // }
+      // Create SVGs.
+    }
+  }
+
   createEmptySVG() {
     this.svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     this.svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
@@ -127,7 +168,7 @@ export class WaveformPanel extends HTMLElement {
         x: '0px',
         y: '0px',
         width: `100%`,
-        height: `100%`, // TODO HARDCODED height
+        height: `100%`,
       }),
       progress: makeSVGElement('rect', {
         class: 'progress',
@@ -135,14 +176,14 @@ export class WaveformPanel extends HTMLElement {
         x: '0px',
         y: '0px',
         width: `0px`,
-        height: `200px`, // TODO HARDCODED height
+        height: `100%`,
       }),
       hover: makeSVGElement('rect', {
         class: 'hover',
         mask: 'url(#waveform)',
         x: '0px',
         y: '0px',
-        height: `200px`, // TODO HARDCODED height
+        height: `100%`,
       }),
       buffered: makeSVGElement('g', {
         class: 'buffered',
@@ -197,7 +238,7 @@ export class WaveformPanel extends HTMLElement {
       return;
     }
     // Is this already added?
-    const existing = this.svgParts.waveforms.querySelector(`[data-sequence="${sequence.id}"]`);
+    const existing = this.svgParts.waveforms.querySelector(`[data-sequence="${sequence.source}"]`);
 
     const waveform = sequence.waveform.data;
     const channel = waveform.channel(0);
@@ -221,7 +262,7 @@ export class WaveformPanel extends HTMLElement {
       const polygon = makeSVGElement('polygon', {
         points: mappedPoints,
         fill: '#fff',
-        'data-sequence': sequence.id,
+        'data-sequence': sequence.source,
       });
       this.svgParts.waveforms.appendChild(polygon);
     }
@@ -240,6 +281,7 @@ export class WaveformPanel extends HTMLElement {
 
     if (this.invalidation.dimensions) {
       this.resizeSVG();
+      this.reseek();
       this.invalidation.dimensions = false;
     }
 
@@ -321,11 +363,17 @@ export class WaveformPanel extends HTMLElement {
             t += seq.endTime - seq.startTime;
           }
 
-          this.dispatchEvent(
+          const shouldUpdate = this.dispatchEvent(
             new CustomEvent('click-waveform', {
               detail: { time, percent, target, currentSequence, sequenceTime: time - t },
+              cancelable: true,
+              bubbles: true,
             })
           );
+
+          if (!shouldUpdate) {
+            return {};
+          }
 
           this.setAttribute('current-time', `${time}`);
 

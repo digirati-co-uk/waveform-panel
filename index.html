@@ -1,39 +1,112 @@
 <html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport"
-          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <title>Waveform Panel</title>
+  <meta charset='UTF-8'>
+  <meta name='viewport'
+        content='width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0'>
+  <meta http-equiv='X-UA-Compatible' content='ie=edge'>
+  <title>Waveform Panel</title>
 </head>
 <body>
 
-<script type="module" src="./src/index.ts"></script>
+<script type='module' src='./src/index.ts'></script>
 
 <waveform-panel
-  id="waveform"
-  srcset="
+  id='waveform'
+  srcset='
     https://iiif-waveforms.s3.eu-west-2.amazonaws.com/vdc_100052359795.0x000018.dat https://api.bl.uk/metadata/iiif/ark:/81055/vdc_100052359795.0x000004,
     https://iiif-waveforms.s3.eu-west-2.amazonaws.com/vdc_100052359795.0x00001a.dat https://api.bl.uk/metadata/iiif/ark:/81055/vdc_100052359795.0x000005,
-  "
-  sequence="
+  '
+  sequence='
      https://api.bl.uk/metadata/iiif/ark:/81055/vdc_100052359795.0x000004#t=0,3723.4
    | https://api.bl.uk/metadata/iiif/ark:/81055/vdc_100052359795.0x000005#t=0,3723.4
-  "
-  current-time="1000"
-  duration="7446.8"
+  '
+  current-time='1000'
+  duration='7446.8'
 ></waveform-panel>
+
+<br />
+<br />
+
+<div style="width: 500px;">
+
+<waveform-panel
+  src="https://iiif-waveforms.s3.eu-west-2.amazonaws.com/vdc_100052359795.0x000018.dat"
+  sequence="https://iiif-waveforms.s3.eu-west-2.amazonaws.com/vdc_100052359795.0x000018.dat#t=100,200 | https://iiif-waveforms.s3.eu-west-2.amazonaws.com/vdc_100052359795.0x000018.dat#t=300,400"
+></waveform-panel>
+
+<waveform-panel
+  src="https://iiif-waveforms.s3.eu-west-2.amazonaws.com/vdc_100052359795.0x000018.dat first"
+  sequence="first#t=100,200 | first#t=200,500"
+></waveform-panel>
+
+<waveform-panel
+  srcset="
+    https://iiif-waveforms.s3.eu-west-2.amazonaws.com/vdc_100052359795.0x000018.dat first,
+    https://iiif-waveforms.s3.eu-west-2.amazonaws.com/vdc_100052359795.0x00001a.dat second,
+  "
+  sequence="
+    first#t=0,100   |
+    first#t=100,200 |
+    second#t=0,400
+  "
+></waveform-panel>
+
+<waveform-panel
+  src="https://iiif-waveforms.s3.eu-west-2.amazonaws.com/vdc_100052359795.0x000018.dat"
+  current-time="200"
+></waveform-panel>
+
+<waveform-panel
+  class="light-waveform"
+  src="https://iiif-waveforms.s3.eu-west-2.amazonaws.com/vdc_100052359795.0x000018.dat"
+></waveform-panel>
+
+</div>
+
+<style>
+    waveform-panel.light-waveform {
+        --waveform-background: #eee;
+        --waveform-base: #8a9aa1;
+        --waveform-hover: #14a4c3;
+        --waveform-buffered: #bbd5de;
+        --waveform-progress: rgba(0, 0, 0, .2);
+    }
+</style>
 
 <script>
 
-    const el = document.getElementById('waveform')
-    el.addEventListener('click-waveform', e => {
-        console.log('detail', e.detail)
-    })
+  const el = document.getElementById('waveform');
+  el.addEventListener('click-waveform', e => {
+    console.log('detail', e.detail);
+  });
 
-    setInterval(() => {
-        el.currentTime = Math.min(el.duration, el.currentTime + 1);
-    }, 1000)
+  setInterval(() => {
+    el.currentTime = Math.min(el.duration, el.currentTime + 1);
+  }, 1000);
+
+
+  console.log({ ...el });
+  setTimeout(() => {
+    el.reseek(
+      {
+        'https://api.bl.uk/metadata/iiif/ark:/81055/vdc_100052359795.0x000004':
+          {
+            _values: [
+              [100, 200],
+              [400, 1000],
+            ],
+            get length() {
+              return this._values.length;
+            },
+            start(index) {
+              return (this._values[index] || [])[0];
+            },
+            end(index) {
+              return (this._values[index] || [])[1];
+            },
+          },
+      });
+  }, 1000);
 
 </script>
 

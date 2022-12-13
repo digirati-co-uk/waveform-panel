@@ -33,6 +33,7 @@ interface WaveformStoreProps {
 
 export type WaveformSequence = {
   id: string;
+  source: string;
   startTime: number;
   endTime: number;
   waveform: null | {
@@ -88,19 +89,51 @@ export function createWaveformStore(props: WaveformStoreProps) {
       getState().resize(); // Let this kick off in the background
     },
 
+    async fetchWaveform(id: string, waveform: string) {
+      if (id && waveform) {
+        return fetch(waveform)
+          .then((r) => r.arrayBuffer())
+          .then((r) => parseWaveform(r))
+          .then((data) => {
+            setState((s) => ({
+              sources: s.sources.map((source) => {
+                if (source.id === id) {
+                  return { ...source, data };
+                }
+                return source;
+              }),
+            }));
+
+            return data;
+          });
+      }
+    },
+
     async resize() {
       const freshState = getState();
       // Need to rebuild our sequences.
       const newSequence: WaveformStoreState['sequence'] = [];
       let didChange = false;
       let accumulator = 0;
-      for (const sequence of freshState.sequence) {
+
+      const freshSequence = freshState.sequence
+        ? freshState.sequence
+        : freshState.sources.map((source, k) => {
+            return {
+              startTime: 0,
+              endTime: 0,
+              id: source.id,
+              source: source.id + k,
+              waveform: null,
+            };
+          });
+
+      for (const sequence of freshSequence) {
         // Goal: set correct sequence waveform.
         const waveform = freshState.sources.find((r) => r.id === sequence.id);
         if (waveform && waveform.data) {
           //
           // 1. Re-sample.
-
           const sequenceLengthSeconds = (sequence.endTime || waveform.data.duration) - (sequence.startTime || 0);
           const sequencePercent = sequenceLengthSeconds / freshState.duration;
           const visualWidth = freshState.dimensions.width * sequencePercent;
@@ -146,46 +179,49 @@ export function createWaveformStore(props: WaveformStoreProps) {
           const [waveform, id = waveform] = trimSplit(src, ' ');
           if (waveform) {
             srcset.push({ id, waveform, data: null });
-            promises.push(
-              fetch(waveform)
-                .then((r) => r.arrayBuffer())
-                .then((r) => parseWaveform(r))
-                .then((data) => {
-                  setState((s) => ({
-                    sources: s.sources.map((source) => {
-                      if (source.id === id) {
-                        return { ...source, data };
-                      }
-                      return source;
-                    }),
-                  }));
-                })
-            );
+            promises.push(this.fetchWaveform(id, waveform));
           }
         }
         // This is replacing... but it could be smarter.
         state.sources = srcset;
       } else if (typeof props.src !== 'undefined') {
-        const [waveform, id = waveform] = trimSplit(props.src, ',');
+        const [waveform, id = waveform] = trimSplit(props.src, ' ');
         if (waveform) {
           state.sources = [{ id, waveform, data: null }];
+          promises.push(
+            this.fetchWaveform(id, waveform).then((wave) => {
+              setState((d) => {
+                if (!d.duration) {
+                  return { duration: wave.duration };
+                }
+                return {};
+              });
+            })
+          );
         }
       }
 
       if (typeof props.sequence !== 'undefined') {
-        const sequence: Array<{ id: string; startTime: number; endTime: number; waveform: null }> = [];
+        const sequence: Array<{ id: string; source: string; startTime: number; endTime: number; waveform: null }> = [];
         const sequences = trimSplit(props.sequence, '|');
         // default#t=0,10|default#t=10,20
+        let duration = 0;
         for (const seq of sequences) {
           const [url, time] = trimSplit(seq, '#t=');
           const [start, end] = trimSplit(time, ',');
+
+          const startTime = parseFloat(start);
+          const endTime = parseFloat(end);
+          duration += endTime - startTime;
           sequence.push({
-            startTime: parseFloat(start),
-            endTime: parseFloat(end),
+            startTime,
+            endTime,
             id: url,
+            source: seq.replace(/[#,:.\n]/g, '__').trim(),
             waveform: null,
           });
         }
+        state.duration = duration;
         state.sequence = sequence;
       }
 
