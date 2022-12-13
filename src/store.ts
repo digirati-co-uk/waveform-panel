@@ -94,7 +94,6 @@ export function createWaveformStore(props: WaveformStoreProps) {
       const newSequence: WaveformStoreState['sequence'] = [];
       let didChange = false;
       let accumulator = 0;
-
       for (const sequence of freshState.sequence) {
         // Goal: set correct sequence waveform.
         const waveform = freshState.sources.find((r) => r.id === sequence.id);
@@ -140,7 +139,7 @@ export function createWaveformStore(props: WaveformStoreProps) {
         state.currentTime = Number(props['current-time']);
       }
 
-      if (props.srcset !== 'undefined') {
+      if (typeof props.srcset !== 'undefined') {
         const srcset: Array<{ waveform: string; id: string; data: null }> = [];
         const sources = trimSplit(props.srcset, ',');
         for (const src of sources) {
