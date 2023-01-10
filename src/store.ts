@@ -156,7 +156,7 @@ export function createWaveformStore(props: WaveformStoreProps) {
       for (const sequence of freshSequence) {
         // Goal: set correct sequence waveform.
         const waveform = (freshState.sources || []).find((r) => r.id === sequence.id);
-        if (waveform && waveform.data) {
+        if (waveform && waveform.data && freshState.dimensions.width) {
           const quality = freshState.quality;
           //
           // 1. Re-sample.
