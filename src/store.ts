@@ -26,6 +26,10 @@ interface WaveformStoreProps {
     isActive: boolean;
   };
 
+  pointer: {
+    isDown: boolean;
+  };
+
   // Derived.
   sources: Array<{ waveform: string; id: string; data: WaveformData | null }>;
   sequence: WaveformSequence[];
@@ -45,6 +49,8 @@ export type WaveformSequence = {
 
 export interface WaveformStoreState extends WaveformStoreProps {
   setDimensions(box: DOMRect, dpi?: number): void;
+
+  setHover(x: number): void;
 
   setAttributes(props: WaveformPanelAttributes): Promise<void>;
 
@@ -69,6 +75,9 @@ export function createWaveformStore(props: WaveformStoreProps) {
       dpi: 0,
     },
     isLoading: true,
+    pointer: {
+      isDown: false,
+    },
     mouse: {
       isHover: false,
       isActive: false,
@@ -87,6 +96,16 @@ export function createWaveformStore(props: WaveformStoreProps) {
       });
 
       getState().resize(); // Let this kick off in the background
+    },
+
+    setHover(x: number) {
+      setState((state) => {
+        const percent = Math.abs(x) / state.dimensions.width;
+        const time = state.duration * percent;
+        return {
+          hoverTime: time,
+        };
+      });
     },
 
     async fetchWaveform(id: string, waveform: string) {

@@ -22,7 +22,6 @@ export class WaveformPanel extends HTMLElement {
     dimensions: false,
     sequence: false,
   };
-  container: HTMLDivElement;
   svg!: SVGElement;
   svgParts!: {
     mask: SVGMaskElement;
@@ -39,8 +38,7 @@ export class WaveformPanel extends HTMLElement {
   constructor() {
     super();
 
-    this.container = document.createElement('div');
-    this.attachShadow({ mode: 'open' }).appendChild(this.container);
+    this.attachShadow({ mode: 'open' });
     const style = document.createElement('style');
     // language=CSS
     style.innerHTML = `
@@ -52,31 +50,20 @@ export class WaveformPanel extends HTMLElement {
         --waveform-buffered: #fff;
         --waveform-progress: rgba(255, 255, 255, .4);
       }
-      
-      svg {
-        background: var(--waveform-background, #000);
-      }
-      svg rect.hover {
-          fill: var(--waveform-hover, #14a4c3);
-      }
-      svg rect.base {
-          fill: var(--waveform-base, #8a9aa1);
-      }
-      svg rect.progress {
-          fill: var(--waveform-progress, #14a4c3);
-      }
-      svg .buffered rect {
-          fill: var(--waveform-buffered, #fff);
-      }
+      svg { background: var(--waveform-background, #000); }
+      svg rect.hover { fill: var(--waveform-hover, #14a4c3); }
+      svg rect.base { fill: var(--waveform-base, #8a9aa1); }
+      svg rect.progress { fill: var(--waveform-progress, #14a4c3); }
+      svg .buffered rect { fill: var(--waveform-buffered, #fff); }
     `;
-    this.shadowRoot.appendChild(style);
 
     window.addEventListener('resize', this.resize);
 
     this.store = createWaveformStore({} as any);
 
     this.createEmptySVG();
-    this.container.appendChild(this.svg);
+    this.shadowRoot.appendChild(this.svg);
+    this.shadowRoot.appendChild(style);
 
     const render = this.render.bind(this);
     this.unsubscribe = this.store.subscribe((state, prevState) => {
@@ -324,7 +311,7 @@ export class WaveformPanel extends HTMLElement {
     const dpi = window.devicePixelRatio || 1;
     this.store.getState().setDimensions(box, dpi);
 
-    const { width, height } = this.container.getBoundingClientRect();
+    const { width, height } = this.getBoundingClientRect();
 
     this.svg.setAttributeNS(null, 'height', `${height}px`);
     this.svg.setAttributeNS(null, 'width', `100%`);
@@ -345,56 +332,56 @@ export class WaveformPanel extends HTMLElement {
       this.hasInitialised = true;
       this.resize();
 
+      const lastTarget = { x: 0, y: 0, moved: false };
+
+      this.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+
+        const { dimensions } = this.store.getState();
+        this.store.setState({ pointer: { isDown: true } });
+        lastTarget.x = e.touches[0].pageX - dimensions.pageX;
+        lastTarget.y = e.touches[0].pageY - dimensions.pageY;
+
+        this.store.getState().setHover(lastTarget.x);
+      });
+
+      this.addEventListener('touchmove', (e) => {
+        if (this.store.getState().pointer.isDown && e.touches.length) {
+          e.preventDefault();
+
+          const { dimensions } = this.store.getState();
+          lastTarget.x = e.touches[0].pageX - dimensions.pageX;
+          lastTarget.y = e.touches[0].pageY - dimensions.pageY;
+          lastTarget.moved = true;
+
+          this.store.getState().setHover(lastTarget.x);
+        }
+      });
+
+      this.addEventListener('touchend', (e) => {
+        e.preventDefault();
+
+        if (this.store.getState().pointer.isDown) {
+          this.store.setState({ pointer: { isDown: false } });
+          // this.moveToPoint(lastTarget, !lastTarget.moved);
+          this.moveToPoint(lastTarget, true);
+          lastTarget.moved = false;
+        }
+      });
+
       this.addEventListener('click', (e) => {
         e.preventDefault();
 
         const { dimensions } = this.store.getState();
         const target = { x: e.pageX - dimensions.pageX, y: e.pageY - dimensions.pageY };
-        this.store.setState((state) => {
-          const percent = Math.abs(target.x) / state.dimensions.width;
-          const time = state.duration * percent;
-
-          let t = 0;
-          let currentSequence;
-          for (const seq of state.sequence) {
-            currentSequence = seq;
-            if (time < t + seq.endTime - seq.startTime) {
-              break;
-            }
-            t += seq.endTime - seq.startTime;
-          }
-
-          const shouldUpdate = this.dispatchEvent(
-            new CustomEvent('click-waveform', {
-              detail: { time, percent, target, currentSequence, sequenceTime: time - t },
-              cancelable: true,
-              bubbles: true,
-            })
-          );
-
-          if (!shouldUpdate) {
-            return {};
-          }
-
-          this.setAttribute('current-time', `${time}`);
-
-          return {
-            currentTime: time,
-          };
-        });
+        this.moveToPoint(target, true);
       });
 
       // Mouse move event.
       this.addEventListener('mousemove', (e) => {
         const { dimensions } = this.store.getState();
         const target = { x: e.pageX - dimensions.pageX, y: e.pageY - dimensions.pageY };
-        this.store.setState((state) => {
-          const percent = Math.abs(target.x) / state.dimensions.width;
-          const time = state.duration * percent;
-          return {
-            hoverTime: time,
-          };
-        });
+        this.store.getState().setHover(target.x);
       });
 
       // Mouse in
@@ -423,6 +410,43 @@ export class WaveformPanel extends HTMLElement {
         }));
       });
     }
+  }
+
+  moveToPoint(target: { x: number; y: number }, isClick = false) {
+    this.store.setState((state) => {
+      const percent = Math.abs(target.x) / state.dimensions.width;
+      const time = state.duration * percent;
+
+      let t = 0;
+      let currentSequence;
+      for (const seq of state.sequence) {
+        currentSequence = seq;
+        if (time < t + seq.endTime - seq.startTime) {
+          break;
+        }
+        t += seq.endTime - seq.startTime;
+      }
+
+      if (isClick) {
+        const shouldUpdate = this.dispatchEvent(
+          new CustomEvent('click-waveform', {
+            detail: { time, percent, target, currentSequence, sequenceTime: time - t },
+            cancelable: true,
+            bubbles: true,
+          })
+        );
+
+        if (!shouldUpdate) {
+          return {};
+        }
+      }
+
+      this.setAttribute('current-time', `${time}`);
+
+      return {
+        currentTime: time,
+      };
+    });
   }
 
   attributeChangedCallback(name, oldValue, newValue) {
