@@ -61,6 +61,8 @@ export type WaveformStore = StoreApi<WaveformStoreState>;
 
 export function createWaveformStore(props: WaveformStoreProps) {
   return create<WaveformStoreState>()((setState, getState, store) => ({
+    sources: [],
+    sequence: [],
     ...props,
     duration: 0,
     currentTime: 0,
@@ -115,7 +117,7 @@ export function createWaveformStore(props: WaveformStoreProps) {
           .then((r) => parseWaveform(r))
           .then((data) => {
             setState((s) => ({
-              sources: s.sources.map((source) => {
+              sources: (s.sources || []).map((source) => {
                 if (source.id === id) {
                   return { ...source, data };
                 }
@@ -137,7 +139,7 @@ export function createWaveformStore(props: WaveformStoreProps) {
 
       const freshSequence = freshState.sequence
         ? freshState.sequence
-        : freshState.sources.map((source, k) => {
+        : (freshState.sources || []).map((source, k) => {
             return {
               startTime: 0,
               endTime: 0,
@@ -149,7 +151,7 @@ export function createWaveformStore(props: WaveformStoreProps) {
 
       for (const sequence of freshSequence) {
         // Goal: set correct sequence waveform.
-        const waveform = freshState.sources.find((r) => r.id === sequence.id);
+        const waveform = (freshState.sources || []).find((r) => r.id === sequence.id);
         if (waveform && waveform.data) {
           //
           // 1. Re-sample.
