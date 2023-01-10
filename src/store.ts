@@ -8,6 +8,7 @@ import { parseWaveform } from './helpers/parse-waveform';
 interface WaveformStoreProps {
   // Properties.
   duration: number;
+  quality: number;
 
   // State.
   currentTime: number;
@@ -44,6 +45,7 @@ export type WaveformSequence = {
     data: WaveformData;
     atWidth: number;
     startPixel: number;
+    quality: number;
   };
 };
 
@@ -67,6 +69,7 @@ export function createWaveformStore(props: WaveformStoreProps) {
     duration: 0,
     currentTime: 0,
     hoverTime: 0,
+    quality: 1,
     bufferedSlices: [],
     waveforms: [],
     dimensions: {
@@ -137,22 +140,24 @@ export function createWaveformStore(props: WaveformStoreProps) {
       let didChange = false;
       let accumulator = 0;
 
-      const freshSequence = freshState.sequence
-        ? freshState.sequence
-        : (freshState.sources || []).map((source, k) => {
-            return {
-              startTime: 0,
-              endTime: 0,
-              id: source.id,
-              source: source.id + k,
-              waveform: null,
-            };
-          });
+      const freshSequence =
+        freshState.sequence && freshState.sequence.length !== 0
+          ? freshState.sequence
+          : (freshState.sources || []).map((source, k) => {
+              return {
+                startTime: 0,
+                endTime: freshState.duration,
+                id: source.id,
+                source: source.id + k,
+                waveform: null,
+              };
+            });
 
       for (const sequence of freshSequence) {
         // Goal: set correct sequence waveform.
         const waveform = (freshState.sources || []).find((r) => r.id === sequence.id);
         if (waveform && waveform.data) {
+          const quality = freshState.quality;
           //
           // 1. Re-sample.
           const sequenceLengthSeconds = (sequence.endTime || waveform.data.duration) - (sequence.startTime || 0);
@@ -160,7 +165,7 @@ export function createWaveformStore(props: WaveformStoreProps) {
           const visualWidth = freshState.dimensions.width * sequencePercent;
           const percentOfWaveformShown = Math.min(1, sequenceLengthSeconds / waveform.data.duration);
           const startPixel = (accumulator / freshState.duration) * freshState.dimensions.width;
-          const data = waveform.data.resample({ width: visualWidth * (1 / percentOfWaveformShown) });
+          const data = waveform.data.resample({ width: quality * visualWidth * (1 / percentOfWaveformShown) });
           didChange = true;
           newSequence.push({
             ...sequence,
@@ -168,6 +173,7 @@ export function createWaveformStore(props: WaveformStoreProps) {
               data,
               atWidth: visualWidth,
               startPixel,
+              quality,
             },
           });
         } else {
@@ -186,7 +192,10 @@ export function createWaveformStore(props: WaveformStoreProps) {
       const state: Partial<WaveformStoreState> = { isLoading: true };
 
       if (typeof props.duration !== 'undefined') {
-        state.duration = parseFloat(props.duration);
+        const duration = parseFloat(props.duration);
+        if (!Number.isNaN(duration)) {
+          state.duration = duration;
+        }
       }
 
       if (typeof props['current-time'] !== 'undefined') {
@@ -222,6 +231,13 @@ export function createWaveformStore(props: WaveformStoreProps) {
         }
       }
 
+      if (typeof props.quality !== 'undefined') {
+        const quality = parseFloat(props.quality);
+        if (quality && !Number.isNaN(quality)) {
+          state.quality = quality;
+        }
+      }
+
       if (typeof props.sequence !== 'undefined') {
         const sequence: Array<{ id: string; source: string; startTime: number; endTime: number; waveform: null }> = [];
         const sequences = trimSplit(props.sequence, '|');
@@ -247,6 +263,10 @@ export function createWaveformStore(props: WaveformStoreProps) {
       }
 
       setState(state);
+
+      if (state.sources || state.sequence || state.quality) {
+        await getState().resize();
+      }
 
       if (promises.length) {
         try {

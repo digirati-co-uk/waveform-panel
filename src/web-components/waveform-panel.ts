@@ -8,6 +8,7 @@ export interface WaveformPanelProps {
   srcset: Array<{ waveform: string; id: string }>;
   sequence: Array<{ id: string; startTime: number; endTime: number }>;
   duration: number;
+  quality: number;
   'current-time': number;
 }
 
@@ -89,6 +90,10 @@ export class WaveformPanel extends HTMLElement {
 
   get duration() {
     return this.store.getState().duration;
+  }
+
+  get quality() {
+    return this.store.getState().quality;
   }
 
   lastBufferedStarts = [];
@@ -227,20 +232,25 @@ export class WaveformPanel extends HTMLElement {
     }
     // Is this already added?
     const existing = this.svgParts.waveforms.querySelector(`[data-sequence="${sequence.source}"]`);
-
     const waveform = sequence.waveform.data;
     const channel = waveform.channel(0);
 
+    const start = ~~(waveform.pixels_per_second * sequence.startTime);
+    const duration = ~~(waveform.pixels_per_second * (sequence.endTime - sequence.startTime));
+    const end = start + duration;
+
     const h = this.store.getState().dimensions.height * 1.5;
     const points = [];
-    for (let x = 0; x < waveform.length - 1; x++) {
+    for (let x = start; x < end; x++) {
       const val = channel.max_sample(x);
-      points.push([sequence.waveform.startPixel + x + 0.5, scaleY(val, h) + 0.5]);
+      const _x = (x - start) / (sequence.waveform.quality || 1);
+      points.push([sequence.waveform.startPixel + (_x === 0 ? 0 : _x + 0.5), scaleY(val, h) + 0.5]);
     }
 
-    for (let x = waveform.length - 1; x >= 0; x--) {
+    for (let x = end; x >= start; x--) {
       const val = channel.min_sample(x);
-      points.push([sequence.waveform.startPixel + x + 0.5, scaleY(val, h) + 0.5]);
+      const _x = (x - start) / (sequence.waveform.quality || 1);
+      points.push([sequence.waveform.startPixel + (_x === 0 ? 0 : _x + 0.5), scaleY(val, h) + 0.5]);
     }
 
     const mappedPoints = points.map((p) => p.join(',')).join(' ');
@@ -274,6 +284,14 @@ export class WaveformPanel extends HTMLElement {
     }
 
     if (this.invalidation.sequence) {
+      const newSources = sequence.map((s) => s.source);
+      for (const existing of [...this.svgParts.waveforms.children]) {
+        const seq = (existing as any).getAttribute('data-sequence');
+        if (!newSources.includes(seq)) {
+          this.removeSequenceFromSVG(seq);
+        }
+      }
+
       for (const seq of sequence) {
         this.addSequenceToSVG(seq);
       }
@@ -303,7 +321,7 @@ export class WaveformPanel extends HTMLElement {
   }
 
   static get observedAttributes(): Array<keyof WaveformPanelAttributes> {
-    return ['src', 'srcset', 'duration', 'sequence', 'current-time'];
+    return ['src', 'srcset', 'duration', 'quality', 'sequence', 'current-time'];
   }
 
   resize = () => {
