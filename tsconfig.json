@@ -2,6 +2,7 @@
   "compilerOptions": {
     "moduleResolution": "Node",
     "target": "ESNext",
+    "allowSyntheticDefaultImports": true,
     "types": [
       "vitest/globals"
     ]
