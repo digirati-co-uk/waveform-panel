@@ -195,7 +195,7 @@ export function createWaveformStore(props: WaveformStoreProps) {
           const matches = r.id === sequence.id;
           if (matches) {
             if (r.segment) {
-              return sequence.startTime <= r.segment.start && sequence.endTime >= r.segment.end;
+              return sequence.startTime >= r.segment.start && sequence.endTime <= r.segment.end;
             }
             return true;
           }
@@ -236,6 +236,8 @@ export function createWaveformStore(props: WaveformStoreProps) {
     async setAttributes(props: WaveformPanelAttributes) {
       const promises: Promise<any>[] = [];
       const state: Partial<WaveformStoreState> = { isLoading: true };
+      const loaders: Record<string, any> = {};
+      const loaded = [];
 
       if (typeof props.duration !== 'undefined') {
         const duration = parseFloat(props.duration);
@@ -252,7 +254,8 @@ export function createWaveformStore(props: WaveformStoreProps) {
         // This is replacing... but it could be smarter.
         const srcset = parseSource(props.srcset);
         for (const src of srcset) {
-          promises.push(this.fetchWaveform(src.waveform));
+          loaders[src.id] = loaders[src.id] ? loaders[src.id] : [];
+          loaders[src.id].push(() => this.fetchWaveform(src.waveform));
         }
 
         state.sources = srcset;
@@ -260,7 +263,8 @@ export function createWaveformStore(props: WaveformStoreProps) {
         const [waveform, id = waveform] = trimSplit(props.src, ' ');
         if (waveform) {
           state.sources = [{ id, waveform, data: null, duration: -1 }];
-          promises.push(
+          loaders[id] = loaders[id] ? loaders[id] : [];
+          loaders[id].push(
             this.fetchWaveform(waveform).then((wave) => {
               setState((d) => {
                 if (!d.duration) {
@@ -288,6 +292,14 @@ export function createWaveformStore(props: WaveformStoreProps) {
         for (const seq of sequences) {
           const [url, time] = trimSplit(seq, '#t=');
           const [start, end] = trimSplit(time, ',');
+
+          const loader = loaders[url];
+
+          if (loader && !loaded.includes(url)) {
+            loaded.push(url);
+            promises.push(...loader.map((l) => l()));
+            loaders[url] = null;
+          }
 
           const startTime = parseFloat(start);
           const endTime = parseFloat(end);
