@@ -234,9 +234,12 @@ export class WaveformPanel extends HTMLElement {
     const existing = this.svgParts.waveforms.querySelector(`[data-sequence="${sequence.source}"]`);
     const waveform = sequence.waveform.data;
     const channel = waveform.channel(0);
-
-    const start = ~~(waveform.pixels_per_second * sequence.startTime);
-    const duration = ~~(waveform.pixels_per_second * (sequence.endTime - sequence.startTime));
+    const startTime = sequence.waveform.segment
+      ? sequence.startTime - sequence.waveform.segment.start
+      : sequence.startTime;
+    const endTime = sequence.waveform.segment ? sequence.endTime - sequence.waveform.segment.start : sequence.endTime;
+    const start = ~~(waveform.pixels_per_second * startTime);
+    const duration = ~~(waveform.pixels_per_second * (endTime - startTime));
     const end = start + duration;
 
     const h = this.store.getState().dimensions.height * 1.5;
@@ -258,7 +261,7 @@ export class WaveformPanel extends HTMLElement {
       try {
         const val = channel.min_sample(x);
         const _x = (x - start) / (sequence.waveform.quality || 1);
-        points.push([sequence.waveform.startPixel + (_x === 0 ? -0.5 : _x + 0.5), scaleY(val, h) + 0.5]);
+        points.push([sequence.waveform.startPixel + (_x === 0 ? -2 : _x + 0.5), scaleY(val, h) + 0.5]);
       } catch (e) {
         lastError = e;
         didError = true;

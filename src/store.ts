@@ -53,6 +53,7 @@ export type WaveformSequence = {
     atWidth: number;
     startPixel: number;
     quality: number;
+    segment?: { id: string; start: number; end: number };
   };
 };
 
@@ -67,6 +68,8 @@ export interface WaveformStoreState extends WaveformStoreProps {
 }
 
 export type WaveformStore = StoreApi<WaveformStoreState>;
+
+const globalDeferredLoading = {};
 
 export function createWaveformStore(props: WaveformStoreProps) {
   return create<WaveformStoreState>()((setState, getState, store) => ({
@@ -178,11 +181,13 @@ export function createWaveformStore(props: WaveformStoreProps) {
           const toSplit = sequence;
           for (let i = 0; i < requiredWaveforms.length; i++) {
             const waveform = requiredWaveforms[i];
+            const start = Math.max(toSplit.startTime, waveform.segment.start);
+            const end = Math.min(toSplit.endTime, waveform.segment.end);
             sequencesWithGaps.push({
               ...toSplit,
-              source: toSplit.id + '__' + i,
-              startTime: Math.max(toSplit.startTime, waveform.segment.start),
-              endTime: Math.min(toSplit.endTime, waveform.segment.end),
+              source: toSplit.id + '__' + start + '__' + end,
+              startTime: start,
+              endTime: end,
             });
           }
           continue;
@@ -202,11 +207,14 @@ export function createWaveformStore(props: WaveformStoreProps) {
           return false;
         });
 
+        const startTime = waveform.segment ? sequence.startTime - waveform.segment.start : sequence.startTime;
+        const endTime = waveform.segment ? sequence.endTime - waveform.segment.start : sequence.endTime;
+
         if (waveform && waveform.data && freshState.dimensions.width) {
           const quality = freshState.quality;
           //
           // 1. Re-sample.
-          const sequenceLengthSeconds = (sequence.endTime || waveform.data.duration) - (sequence.startTime || 0);
+          const sequenceLengthSeconds = (endTime || waveform.data.duration) - (startTime || 0);
           const sequencePercent = sequenceLengthSeconds / freshState.duration;
           const visualWidth = freshState.dimensions.width * sequencePercent;
           const percentOfWaveformShown = Math.min(1, sequenceLengthSeconds / waveform.data.duration);
@@ -220,13 +228,14 @@ export function createWaveformStore(props: WaveformStoreProps) {
               atWidth: visualWidth,
               startPixel,
               quality,
+              segment: waveform.segment,
             },
           });
         } else {
           newSequence.push(sequence);
         }
 
-        accumulator += sequence.endTime - sequence.startTime;
+        accumulator += endTime - startTime;
       }
       if (didChange) {
         setState({ sequence: newSequence });
@@ -254,8 +263,8 @@ export function createWaveformStore(props: WaveformStoreProps) {
         // This is replacing... but it could be smarter.
         const srcset = parseSource(props.srcset);
         for (const src of srcset) {
-          loaders[src.id] = loaders[src.id] ? loaders[src.id] : [];
-          loaders[src.id].push(() => this.fetchWaveform(src.waveform));
+          globalDeferredLoading[src.id] = globalDeferredLoading[src.id] ? globalDeferredLoading[src.id] : [];
+          globalDeferredLoading[src.id].push(() => this.fetchWaveform(src.waveform));
         }
 
         state.sources = srcset;
@@ -263,8 +272,7 @@ export function createWaveformStore(props: WaveformStoreProps) {
         const [waveform, id = waveform] = trimSplit(props.src, ' ');
         if (waveform) {
           state.sources = [{ id, waveform, data: null, duration: -1 }];
-          loaders[id] = loaders[id] ? loaders[id] : [];
-          loaders[id].push(
+          promises.push(
             this.fetchWaveform(waveform).then((wave) => {
               setState((d) => {
                 if (!d.duration) {
@@ -293,12 +301,11 @@ export function createWaveformStore(props: WaveformStoreProps) {
           const [url, time] = trimSplit(seq, '#t=');
           const [start, end] = trimSplit(time, ',');
 
-          const loader = loaders[url];
-
+          const loader = globalDeferredLoading[url];
           if (loader && !loaded.includes(url)) {
             loaded.push(url);
             promises.push(...loader.map((l) => l()));
-            loaders[url] = null;
+            globalDeferredLoading[url] = null;
           }
 
           const startTime = parseFloat(start);
