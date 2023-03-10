@@ -241,16 +241,35 @@ export class WaveformPanel extends HTMLElement {
 
     const h = this.store.getState().dimensions.height * 1.5;
     const points = [];
+    let didError = false;
+    let lastError;
     for (let x = start; x < end; x++) {
-      const val = channel.max_sample(x);
-      const _x = (x - start) / (sequence.waveform.quality || 1);
-      points.push([sequence.waveform.startPixel + (_x === 0 ? 0 : _x + 0.5), scaleY(val, h) + 0.5]);
+      try {
+        const val = channel.max_sample(x);
+        const _x = (x - start) / (sequence.waveform.quality || 1);
+        points.push([sequence.waveform.startPixel + (_x === 0 ? -2 : _x + 0.5), scaleY(val, h) + 0.5]);
+      } catch (e) {
+        lastError = e;
+        didError = true;
+      }
     }
 
     for (let x = end; x >= start; x--) {
-      const val = channel.min_sample(x);
-      const _x = (x - start) / (sequence.waveform.quality || 1);
-      points.push([sequence.waveform.startPixel + (_x === 0 ? 0 : _x + 0.5), scaleY(val, h) + 0.5]);
+      try {
+        const val = channel.min_sample(x);
+        const _x = (x - start) / (sequence.waveform.quality || 1);
+        points.push([sequence.waveform.startPixel + (_x === 0 ? -0.5 : _x + 0.5), scaleY(val, h) + 0.5]);
+      } catch (e) {
+        lastError = e;
+        didError = true;
+      }
+    }
+
+    if (didError) {
+      if (lastError) {
+        console.error(lastError);
+      }
+      console.error('Error rendering waveform', channel, sequence);
     }
 
     const mappedPoints = points.map((p) => p.join(',')).join(' ');

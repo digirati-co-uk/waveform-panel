@@ -4,8 +4,9 @@ import WaveformData from 'waveform-data';
 import { trimSplit } from './helpers/trim-spit';
 import { WaveformPanelAttributes } from './web-components/waveform-panel';
 import { parseWaveform } from './helpers/parse-waveform';
+import { parseSource } from './attributes/source';
 
-interface WaveformStoreProps {
+export interface WaveformStoreProps {
   // Properties.
   duration: number;
   quality: number;
@@ -32,7 +33,13 @@ interface WaveformStoreProps {
   };
 
   // Derived.
-  sources: Array<{ waveform: string; id: string; data: WaveformData | null }>;
+  sources: Array<{
+    waveform: string;
+    id: string;
+    data: WaveformData | null;
+    duration?: number;
+    segment?: { id: string; start: number; end: number };
+  }>;
   sequence: WaveformSequence[];
 }
 
@@ -113,16 +120,17 @@ export function createWaveformStore(props: WaveformStoreProps) {
       });
     },
 
-    async fetchWaveform(id: string, waveform: string) {
-      if (id && waveform) {
+    async fetchWaveform(waveform: string) {
+      if (waveform) {
         return fetch(waveform)
           .then((r) => r.arrayBuffer())
           .then((r) => parseWaveform(r))
           .then((data) => {
             setState((s) => ({
               sources: (s.sources || []).map((source) => {
-                if (source.id === id) {
-                  return { ...source, data };
+                if (source.waveform === waveform) {
+                  // @todo check if existing duration does not match new duration.
+                  return { ...source, duration: data.duration, data };
                 }
                 return source;
               }),
@@ -133,7 +141,7 @@ export function createWaveformStore(props: WaveformStoreProps) {
       }
     },
 
-    async resize() {
+    resize: async function () {
       const freshState = getState();
       // Need to rebuild our sequences.
       const newSequence: WaveformStoreState['sequence'] = [];
@@ -145,17 +153,55 @@ export function createWaveformStore(props: WaveformStoreProps) {
           ? freshState.sequence
           : (freshState.sources || []).map((source, k) => {
               return {
-                startTime: 0,
-                endTime: freshState.duration,
+                startTime: source.segment ? source.segment.start : 0,
+                endTime: source.segment ? source.segment.end : freshState.duration,
                 id: source.id,
                 source: source.id + k,
                 waveform: null,
               };
             });
 
-      for (const sequence of freshSequence) {
-        // Goal: set correct sequence waveform.
-        const waveform = (freshState.sources || []).find((r) => r.id === sequence.id);
+      const sequencesWithGaps = [];
+      for (let sequence of freshSequence) {
+        const requiredWaveforms = (freshState.sources || []).filter((source) => {
+          if (source.id === sequence.id) {
+            if (source.segment) {
+              const segment = source.segment;
+              return sequence.endTime > segment.start && sequence.startTime < segment.end;
+            }
+            return true;
+          }
+          return false;
+        });
+        if (requiredWaveforms.length > 1) {
+          // We need to split.
+          const toSplit = sequence;
+          for (let i = 0; i < requiredWaveforms.length; i++) {
+            const waveform = requiredWaveforms[i];
+            sequencesWithGaps.push({
+              ...toSplit,
+              source: toSplit.id + '__' + i,
+              startTime: Math.max(toSplit.startTime, waveform.segment.start),
+              endTime: Math.min(toSplit.endTime, waveform.segment.end),
+            });
+          }
+          continue;
+        }
+        sequencesWithGaps.push(sequence);
+      }
+
+      for (let sequence of sequencesWithGaps) {
+        const waveform = (freshState.sources || []).find((r) => {
+          const matches = r.id === sequence.id;
+          if (matches) {
+            if (r.segment) {
+              return sequence.startTime <= r.segment.start && sequence.endTime >= r.segment.end;
+            }
+            return true;
+          }
+          return false;
+        });
+
         if (waveform && waveform.data && freshState.dimensions.width) {
           const quality = freshState.quality;
           //
@@ -203,23 +249,19 @@ export function createWaveformStore(props: WaveformStoreProps) {
       }
 
       if (typeof props.srcset !== 'undefined') {
-        const srcset: Array<{ waveform: string; id: string; data: null }> = [];
-        const sources = trimSplit(props.srcset, ',');
-        for (const src of sources) {
-          const [waveform, id = waveform] = trimSplit(src, ' ');
-          if (waveform) {
-            srcset.push({ id, waveform, data: null });
-            promises.push(this.fetchWaveform(id, waveform));
-          }
-        }
         // This is replacing... but it could be smarter.
+        const srcset = parseSource(props.srcset);
+        for (const src of srcset) {
+          promises.push(this.fetchWaveform(src.waveform));
+        }
+
         state.sources = srcset;
       } else if (typeof props.src !== 'undefined') {
         const [waveform, id = waveform] = trimSplit(props.src, ' ');
         if (waveform) {
-          state.sources = [{ id, waveform, data: null }];
+          state.sources = [{ id, waveform, data: null, duration: -1 }];
           promises.push(
-            this.fetchWaveform(id, waveform).then((wave) => {
+            this.fetchWaveform(waveform).then((wave) => {
               setState((d) => {
                 if (!d.duration) {
                   return { duration: wave.duration };

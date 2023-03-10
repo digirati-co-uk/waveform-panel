@@ -119,7 +119,7 @@ Each source is structured as follows:
 ```
 [waveform-url] [identifier], [waveform-url] [identifier]
 ```
-With spaces to add an identifier after each, and a comma `,` separating sources.
+With spaces to add an identifier after each, and a comma `,` (or pipe `|`) separating sources.
 
 ```html
 <waveform-panel
@@ -129,8 +129,27 @@ With spaces to add an identifier after each, and a comma `,` separating sources.
   "
 ></waveform-panel>
 ```
-
 _**Note**: Line breaks are valid, and added for readability._
+
+You can also optionally have a single `[identifier]` made up of multiple waveforms. This will internally
+split the sequence into two distinct sections - but might be closer to the original data modelled.
+
+If you are using targets, the structure changes to be:
+```
+[waveform-url] [identifier]#t=[start],[end] | [waveform-url] [identifier]#t=[start],[end]
+```
+With spaces to add an identifier with target and only pipes `|` to separate sources.
+
+```html
+<waveform-panel
+  srcset="
+    https://iiif-waveforms.s3.eu-west-2.amazonaws.com/vdc_100052359795.0x000018.dat first#t=0,50   |
+    https://iiif-waveforms.s3.eu-west-2.amazonaws.com/vdc_100052359795.0x00001a.dat first#t=50,100 | 
+  "
+></waveform-panel>
+```
+
+_**Note**: you have to use a pipe `|` to split sequences if you include `#t=` selectors._ 
 
 #### Multiple sources + sequences
 

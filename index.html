@@ -103,6 +103,19 @@
 
 </div>
 
+<waveform-panel
+  srcset="
+    https://iiif-waveforms.s3.eu-west-2.amazonaws.com/vdc_100052359795.0x000018.dat first#t=0,50    |
+    https://iiif-waveforms.s3.eu-west-2.amazonaws.com/vdc_100052359795.0x00001a.dat first#t=50,100  |
+    https://iiif-waveforms.s3.eu-west-2.amazonaws.com/vdc_100052359795.0x000018.dat first#t=101,150  |
+    https://iiif-waveforms.s3.eu-west-2.amazonaws.com/vdc_100052359795.0x00001a.dat second           |
+  "
+  sequence="
+    first#t=0,100 |
+    second#t=0,400
+  "
+></waveform-panel>
+
 <style>
     waveform-panel {
         margin-bottom: 10px;
@@ -153,7 +166,6 @@
   }, 1000);
 
 </script>
-
 
 
 </body>
