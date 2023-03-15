@@ -1,6 +1,6 @@
-export function scaleY(amplitude: number, height: number) {
-  const range = 256;
-  const offset = 128;
+export function scaleY(amplitude: number, height: number, range = 128) {
+  const h = height;
+  const offset = range / 2;
 
-  return height - ((amplitude + offset) * height) / range;
+  return h - ((amplitude + offset) * h) / range;
 }

@@ -109,8 +109,6 @@ export function createWaveformStore(props: WaveformStoreProps) {
           dpi,
         },
       });
-
-      getState().resize(); // Let this kick off in the background
     },
 
     setHover(x: number) {
@@ -181,8 +179,8 @@ export function createWaveformStore(props: WaveformStoreProps) {
           const toSplit = sequence;
           for (let i = 0; i < requiredWaveforms.length; i++) {
             const waveform = requiredWaveforms[i];
-            const start = Math.max(toSplit.startTime, waveform.segment.start);
-            const end = Math.min(toSplit.endTime, waveform.segment.end);
+            const start = waveform.segment ? Math.max(toSplit.startTime, waveform.segment.start) : toSplit.startTime;
+            const end = waveform.segment ? Math.min(toSplit.endTime, waveform.segment.end) : toSplit.endTime;
             sequencesWithGaps.push({
               ...toSplit,
               source: toSplit.id + '__' + start + '__' + end,
@@ -220,6 +218,9 @@ export function createWaveformStore(props: WaveformStoreProps) {
           const percentOfWaveformShown = Math.min(1, sequenceLengthSeconds / waveform.data.duration);
           const startPixel = (accumulator / freshState.duration) * freshState.dimensions.width;
           const data = waveform.data.resample({ width: quality * visualWidth * (1 / percentOfWaveformShown) });
+          // Unblock the thread.
+          await new Promise((resolve) => setTimeout(resolve, 0));
+
           didChange = true;
           newSequence.push({
             ...sequence,

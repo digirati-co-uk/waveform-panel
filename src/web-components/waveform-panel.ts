@@ -218,7 +218,7 @@ export class WaveformPanel extends HTMLElement {
   resizeSVG() {
     const dimensions = this.store.getState().dimensions;
 
-    this.svgParts.waveforms.setAttributeNS(null, 'x', `-${this.store.getState().dimensions.height / 2}px`);
+    // this.svgParts.waveforms.setAttributeNS(null, 'x', `-${this.store.getState().dimensions.height / 2}px`);
     this.svgParts.maskBg.setAttributeNS(null, 'width', `${dimensions.width}px`);
     this.svgParts.base.setAttributeNS(null, 'height', `${dimensions.height}px`);
     this.svgParts.progress.setAttributeNS(null, 'height', `${dimensions.height}px`);
@@ -242,15 +242,38 @@ export class WaveformPanel extends HTMLElement {
     const duration = ~~(waveform.pixels_per_second * (endTime - startTime));
     const end = start + duration;
 
-    const h = this.store.getState().dimensions.height * 1.5;
+    const h = this.store.getState().dimensions.height;
     const points = [];
     let didError = false;
     let lastError;
+    const maxSamples = [];
+    const minSamples = [];
+
+    for (let x = start; x < end; x++) {
+      const max = channel.max_sample(x);
+      if (Number.isSafeInteger(max)) {
+        maxSamples[x] = max;
+      }
+    }
+    for (let x = end; x >= start; x--) {
+      const min = channel.min_sample(x);
+      if (Number.isSafeInteger(min)) {
+        minSamples[x] = min;
+      }
+    }
+
+    if (maxSamples.length === 0 || minSamples.length === 0) {
+      return;
+    }
+
+    const maxFactor = Math.max(...maxSamples.filter(Boolean)) * 2.5;
+    const minFactor = Math.abs(Math.min(...minSamples.filter(Boolean))) * 2.5;
+
     for (let x = start; x < end; x++) {
       try {
-        const val = channel.max_sample(x);
+        const val = maxSamples[x];
         const _x = (x - start) / (sequence.waveform.quality || 1);
-        points.push([sequence.waveform.startPixel + (_x === 0 ? -2 : _x + 0.5), scaleY(val, h) + 0.5]);
+        points.push([sequence.waveform.startPixel + (_x === 0 ? -2 : _x + 0.5), scaleY(val, h, maxFactor) + 0.5]);
       } catch (e) {
         lastError = e;
         didError = true;
@@ -259,9 +282,9 @@ export class WaveformPanel extends HTMLElement {
 
     for (let x = end; x >= start; x--) {
       try {
-        const val = channel.min_sample(x);
+        const val = minSamples[x];
         const _x = (x - start) / (sequence.waveform.quality || 1);
-        points.push([sequence.waveform.startPixel + (_x === 0 ? -2 : _x + 0.5), scaleY(val, h) + 0.5]);
+        points.push([sequence.waveform.startPixel + (_x === 0 ? -2 : _x + 0.5), scaleY(val, h, minFactor) + 0.5]);
       } catch (e) {
         lastError = e;
         didError = true;
@@ -273,6 +296,7 @@ export class WaveformPanel extends HTMLElement {
         console.error(lastError);
       }
       console.error('Error rendering waveform', channel, sequence);
+      console.log('Debug component', this.outerHTML);
     }
 
     const mappedPoints = points.map((p) => p.join(',')).join(' ');
@@ -346,6 +370,10 @@ export class WaveformPanel extends HTMLElement {
     return ['src', 'srcset', 'duration', 'quality', 'sequence', 'current-time'];
   }
 
+  lastWidth = -1;
+  lastHeight = -1;
+  resizeTimout = -1;
+
   resize = () => {
     const box = this.getBoundingClientRect();
     const dpi = window.devicePixelRatio || 1;
@@ -353,10 +381,27 @@ export class WaveformPanel extends HTMLElement {
 
     const { width, height } = this.getBoundingClientRect();
 
+    if (this.resizeTimout !== -1 && this.lastHeight === height && this.lastWidth === width) {
+      return;
+    }
+
+    this.lastWidth = width;
+    this.lastHeight = height;
+
     this.svg.setAttributeNS(null, 'height', `${height}px`);
     this.svg.setAttributeNS(null, 'width', `100%`);
     this.svg.setAttributeNS(null, 'preserveAspectRatio', `none`);
-    this.svg.setAttributeNS(null, 'viewBox', `0 ${height / 2.5} ${width} ${height / 1.5}`);
+    this.svg.setAttributeNS(null, 'viewBox', `0 0 ${width} ${height}`);
+
+    if (this.resizeTimout !== -1) {
+      clearTimeout(this.resizeTimout);
+      this.resizeTimout = -1;
+    }
+
+    this.resizeTimout = setTimeout(() => {
+      this.store.getState().resize();
+      this.resizeTimout = -1;
+    }, 200) as any;
   };
 
   // Web component life-cycle.
