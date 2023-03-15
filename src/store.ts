@@ -209,7 +209,7 @@ export function createWaveformStore(props: WaveformStoreProps) {
         const endTime = waveform.segment ? sequence.endTime - waveform.segment.start : sequence.endTime;
 
         if (waveform && waveform.data && freshState.dimensions.width) {
-          const quality = freshState.quality;
+          let quality = freshState.quality;
           //
           // 1. Re-sample.
           const sequenceLengthSeconds = (endTime || waveform.data.duration) - (startTime || 0);
@@ -217,7 +217,17 @@ export function createWaveformStore(props: WaveformStoreProps) {
           const visualWidth = freshState.dimensions.width * sequencePercent;
           const percentOfWaveformShown = Math.min(1, sequenceLengthSeconds / waveform.data.duration);
           const startPixel = (accumulator / freshState.duration) * freshState.dimensions.width;
-          const data = waveform.data.resample({ width: quality * visualWidth * (1 / percentOfWaveformShown) });
+
+          let newWidth = quality * visualWidth * (1 / percentOfWaveformShown);
+          const newScale = Math.floor((waveform.data.duration * waveform.data.sample_rate) / newWidth);
+
+          if (newScale < waveform.data.scale) {
+            quality *= newScale / waveform.data.scale;
+            newWidth = quality * visualWidth * (1 / percentOfWaveformShown);
+            console.warn('Selected quality too high, or segment too small', { quality, newWidth });
+          }
+
+          const data = waveform.data.resample({ width: newWidth });
           // Unblock the thread.
           await new Promise((resolve) => setTimeout(resolve, 0));
 

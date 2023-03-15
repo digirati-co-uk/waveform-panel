@@ -43,19 +43,34 @@ export class WaveformPanel extends HTMLElement {
     const style = document.createElement('style');
     // language=CSS
     style.innerHTML = `
-      :host {
-        display: block;
-        --waveform-background: #000;
-        --waveform-base: #8a9aa1;
-        --waveform-hover: #14a4c3;
-        --waveform-buffered: #fff;
-        --waveform-progress: rgba(255, 255, 255, .4);
-      }
-      svg { background: var(--waveform-background, #000); }
-      svg rect.hover { fill: var(--waveform-hover, #14a4c3); }
-      svg rect.base { fill: var(--waveform-base, #8a9aa1); }
-      svg rect.progress { fill: var(--waveform-progress, #14a4c3); }
-      svg .buffered rect { fill: var(--waveform-buffered, #fff); }
+        :host {
+            display: block;
+            --waveform-background: #000;
+            --waveform-base: #8a9aa1;
+            --waveform-hover: #14a4c3;
+            --waveform-buffered: #fff;
+            --waveform-progress: rgba(255, 255, 255, .4);
+        }
+
+        svg {
+            background: var(--waveform-background, #000);
+        }
+
+        svg rect.hover {
+            fill: var(--waveform-hover, #14a4c3);
+        }
+
+        svg rect.base {
+            fill: var(--waveform-base, #8a9aa1);
+        }
+
+        svg rect.progress {
+            fill: var(--waveform-progress, #14a4c3);
+        }
+
+        svg .buffered rect {
+            fill: var(--waveform-buffered, #fff);
+        }
     `;
 
     window.addEventListener('resize', this.resize);
@@ -237,7 +252,12 @@ export class WaveformPanel extends HTMLElement {
     const startTime = sequence.waveform.segment
       ? sequence.startTime - sequence.waveform.segment.start
       : sequence.startTime;
-    const endTime = sequence.waveform.segment ? sequence.endTime - sequence.waveform.segment.start : sequence.endTime;
+    let endTime = sequence.waveform.segment ? sequence.endTime - sequence.waveform.segment.start : sequence.endTime;
+    if (endTime > waveform.duration) {
+      console.warn('Data does not match waveform duration', { overflow: endTime - waveform.duration });
+      endTime = waveform.duration - 0.01;
+    }
+
     const start = ~~(waveform.pixels_per_second * startTime);
     const duration = ~~(waveform.pixels_per_second * (endTime - startTime));
     const end = start + duration;
@@ -250,15 +270,26 @@ export class WaveformPanel extends HTMLElement {
     const minSamples = [];
 
     for (let x = start; x < end; x++) {
-      const max = channel.max_sample(x);
-      if (Number.isSafeInteger(max)) {
-        maxSamples[x] = max;
+      try {
+        const max = channel.max_sample(x);
+        if (Number.isSafeInteger(max)) {
+          maxSamples[x] = max;
+        }
+      } catch (e) {
+        lastError = e;
+        didError = true;
       }
     }
+
     for (let x = end; x >= start; x--) {
-      const min = channel.min_sample(x);
-      if (Number.isSafeInteger(min)) {
-        minSamples[x] = min;
+      try {
+        const min = channel.min_sample(x);
+        if (Number.isSafeInteger(min)) {
+          minSamples[x] = min;
+        }
+      } catch (e) {
+        lastError = e;
+        didError = true;
       }
     }
 
@@ -266,28 +297,22 @@ export class WaveformPanel extends HTMLElement {
       return;
     }
 
-    const maxFactor = Math.max(...maxSamples.filter(Boolean)) * 2.5;
-    const minFactor = Math.abs(Math.min(...minSamples.filter(Boolean))) * 2.5;
+    const maxFactor = Math.max(0, ...maxSamples.filter((t) => typeof t !== 'undefined')) * 2.5;
+    const minFactor = Math.abs(Math.min(...minSamples.filter((t) => typeof t !== 'undefined'))) * 2.5;
 
     for (let x = start; x < end; x++) {
-      try {
-        const val = maxSamples[x];
+      const val = maxSamples[x];
+      if (typeof val !== 'undefined') {
         const _x = (x - start) / (sequence.waveform.quality || 1);
-        points.push([sequence.waveform.startPixel + (_x === 0 ? -2 : _x + 0.5), scaleY(val, h, maxFactor) + 0.5]);
-      } catch (e) {
-        lastError = e;
-        didError = true;
+        points.push([sequence.waveform.startPixel + (_x === 0 ? -2 : _x + 0.5), scaleY(val, h, maxFactor + 1) + 0.5]);
       }
     }
 
     for (let x = end; x >= start; x--) {
-      try {
-        const val = minSamples[x];
+      const val = minSamples[x];
+      if (typeof val !== 'undefined') {
         const _x = (x - start) / (sequence.waveform.quality || 1);
-        points.push([sequence.waveform.startPixel + (_x === 0 ? -2 : _x + 0.5), scaleY(val, h, minFactor) + 0.5]);
-      } catch (e) {
-        lastError = e;
-        didError = true;
+        points.push([sequence.waveform.startPixel + (_x === 0 ? -2 : _x + 0.5), scaleY(val, h, minFactor + 1) + 0.5]);
       }
     }
 
