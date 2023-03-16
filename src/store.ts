@@ -207,6 +207,8 @@ export function createWaveformStore(props: WaveformStoreProps) {
 
         const startTime = waveform.segment ? sequence.startTime - waveform.segment.start : sequence.startTime;
         const endTime = waveform.segment ? sequence.endTime - waveform.segment.start : sequence.endTime;
+        const duration = endTime - startTime;
+        if (duration <= 0) continue;
 
         if (waveform && waveform.data && freshState.dimensions.width) {
           let quality = freshState.quality;
@@ -227,21 +229,25 @@ export function createWaveformStore(props: WaveformStoreProps) {
             console.warn('Selected quality too high, or segment too small', { quality, newWidth });
           }
 
-          const data = waveform.data.resample({ width: newWidth });
-          // Unblock the thread.
-          await new Promise((resolve) => setTimeout(resolve, 0));
+          try {
+            const data = waveform.data.resample({ width: newWidth });
+            // Unblock the thread.
+            await new Promise((resolve) => setTimeout(resolve, 0));
 
-          didChange = true;
-          newSequence.push({
-            ...sequence,
-            waveform: {
-              data,
-              atWidth: visualWidth,
-              startPixel,
-              quality,
-              segment: waveform.segment,
-            },
-          });
+            didChange = true;
+            newSequence.push({
+              ...sequence,
+              waveform: {
+                data,
+                atWidth: visualWidth,
+                startPixel,
+                quality,
+                segment: waveform.segment,
+              },
+            });
+          } catch (e) {
+            console.error(e);
+          }
         } else {
           newSequence.push(sequence);
         }

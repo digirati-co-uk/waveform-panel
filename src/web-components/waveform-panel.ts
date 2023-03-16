@@ -32,6 +32,7 @@ export class WaveformPanel extends HTMLElement {
     progress: SVGRectElement;
     hover: SVGRectElement;
     buffered: SVGGElement;
+    line: SVGGElement;
   };
   buffered?: Record<string, TimeRanges>;
   waveformCache: Record<string, WaveformData> = {};
@@ -196,6 +197,11 @@ export class WaveformPanel extends HTMLElement {
       buffered: makeSVGElement('g', {
         class: 'buffered',
       }),
+      line: makeSVGElement('line', {
+        class: 'waveform-line',
+        x1: '0px',
+        stroke: '#999',
+      }),
     };
 
     // The structure.
@@ -220,6 +226,7 @@ export class WaveformPanel extends HTMLElement {
 
     this.svgParts.mask.appendChild(this.svgParts.maskBg);
     this.svgParts.mask.appendChild(this.svgParts.waveforms);
+    this.svgParts.waveforms.appendChild(this.svgParts.line);
     const defs = makeSVGElement('defs', {});
     defs.appendChild(this.svgParts.mask);
 
@@ -238,6 +245,10 @@ export class WaveformPanel extends HTMLElement {
     this.svgParts.base.setAttributeNS(null, 'height', `${dimensions.height}px`);
     this.svgParts.progress.setAttributeNS(null, 'height', `${dimensions.height}px`);
     this.svgParts.hover.setAttributeNS(null, 'height', `${dimensions.height}px`);
+
+    this.svgParts.line.setAttributeNS(null, 'x2', `${dimensions.width}px`);
+    this.svgParts.line.setAttributeNS(null, 'y1', `${dimensions.height / 2}px`);
+    this.svgParts.line.setAttributeNS(null, 'y2', `${dimensions.height / 2}px`);
   }
 
   addSequenceToSVG(sequence: WaveformSequence) {
@@ -559,6 +570,7 @@ export class WaveformPanel extends HTMLElement {
     });
   }
 
+  // @todo batch these.
   attributeChangedCallback(name, oldValue, newValue) {
     if (this.hasInitialised) {
       this.store

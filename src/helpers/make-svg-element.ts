@@ -1,3 +1,4 @@
+export function makeSVGElement(type: 'line', attrs: Partial<Record<string, string>>): SVGGElement;
 export function makeSVGElement(type: 'g', attrs: Partial<Record<string, string>>): SVGGElement;
 export function makeSVGElement(type: 'defs', attrs: Partial<Record<string, string>>): SVGDefsElement;
 export function makeSVGElement(type: 'mask', attrs: Partial<Record<string, string>>): SVGMaskElement;
