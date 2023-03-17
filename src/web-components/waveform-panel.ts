@@ -9,6 +9,7 @@ export interface WaveformPanelProps {
   sequence: Array<{ id: string; startTime: number; endTime: number }>;
   duration: number;
   quality: number;
+  resize: 'true' | 'false';
   'current-time': number;
 }
 
@@ -25,6 +26,7 @@ export class WaveformPanel extends HTMLElement {
   };
   svg!: SVGElement;
   svgParts!: {
+    loading: SVGRectElement;
     mask: SVGMaskElement;
     waveforms: SVGGElement;
     maskBg: SVGRectElement;
@@ -57,6 +59,10 @@ export class WaveformPanel extends HTMLElement {
             background: var(--waveform-background, #000);
         }
 
+        svg .waveforms {
+            transition: opacity 140ms;
+        }
+
         svg rect.hover {
             fill: var(--waveform-hover, #14a4c3);
         }
@@ -72,9 +78,11 @@ export class WaveformPanel extends HTMLElement {
         svg .buffered rect {
             fill: var(--waveform-buffered, #fff);
         }
-    `;
 
-    window.addEventListener('resize', this.resize);
+        svg .loading {
+            translate: 0px -0.5px;
+        }
+    `;
 
     this.store = createWaveformStore({} as any);
 
@@ -86,6 +94,15 @@ export class WaveformPanel extends HTMLElement {
     this.unsubscribe = this.store.subscribe((state, prevState) => {
       if (state.sequence !== prevState.sequence) {
         this.invalidation.sequence = true;
+      }
+
+      if (state.isLoading !== prevState.isLoading) {
+        this.setIsLoading(state.isLoading);
+      }
+      if (state.loadingProgress !== prevState.loadingProgress) {
+        if (this.svgParts.loading) {
+          this.svgParts.loading.style.width = `${state.loadingProgress * 100}%`;
+        }
       }
 
       if (state.dimensions !== prevState.dimensions) {
@@ -160,6 +177,14 @@ export class WaveformPanel extends HTMLElement {
     this.svg.style.background = `var(--waveform-background, #000)`;
 
     this.svgParts = {
+      loading: makeSVGElement('rect', {
+        x: '0',
+        y: '50%',
+        width: '',
+        height: '1',
+        fill: '#fff',
+        class: 'loading',
+      }),
       mask: makeSVGElement('mask', { id: 'waveform' }),
       waveforms: makeSVGElement('g', {
         class: 'waveforms',
@@ -235,6 +260,7 @@ export class WaveformPanel extends HTMLElement {
     this.svg.appendChild(this.svgParts.buffered);
     this.svg.appendChild(this.svgParts.hover);
     this.svg.appendChild(this.svgParts.progress);
+    this.svg.appendChild(this.svgParts.loading);
   }
 
   resizeSVG() {
@@ -403,23 +429,29 @@ export class WaveformPanel extends HTMLElement {
   }
 
   static get observedAttributes(): Array<keyof WaveformPanelAttributes> {
-    return ['src', 'srcset', 'duration', 'quality', 'sequence', 'current-time'];
+    return ['src', 'srcset', 'duration', 'quality', 'sequence', 'current-time', 'resize'];
   }
 
   lastWidth = -1;
   lastHeight = -1;
   resizeTimout = -1;
+  requeueResize = false;
 
   resize = () => {
+    if (this.resizeTimout === -1) {
+      this.resizeTimout = setTimeout(this.forceResize, 0) as any;
+    }
+  };
+  isAlreadyResizing = false;
+
+  forceResize = () => {
+    this.resizeTimout = -1;
+
     const box = this.getBoundingClientRect();
     const dpi = window.devicePixelRatio || 1;
     this.store.getState().setDimensions(box, dpi);
 
     const { width, height } = this.getBoundingClientRect();
-
-    if (this.resizeTimout !== -1 && this.lastHeight === height && this.lastWidth === width) {
-      return;
-    }
 
     this.lastWidth = width;
     this.lastHeight = height;
@@ -429,29 +461,52 @@ export class WaveformPanel extends HTMLElement {
     this.svg.setAttributeNS(null, 'preserveAspectRatio', `none`);
     this.svg.setAttributeNS(null, 'viewBox', `0 0 ${width} ${height}`);
 
-    if (this.resizeTimout !== -1) {
-      clearTimeout(this.resizeTimout);
-      this.resizeTimout = -1;
-    }
+    if (this.hasInitialised) {
+      if (this.isAlreadyResizing) {
+        this.requeueResize = true;
+        return;
+      }
 
-    this.resizeTimout = setTimeout(() => {
-      this.store.getState().resize();
-      this.resizeTimout = -1;
-    }, 200) as any;
+      this.isAlreadyResizing = true;
+
+      this.setIsLoading(true);
+
+      this.store
+        .getState()
+        .resize()
+        .then(() => {
+          this.setIsLoading(false);
+          this.resizeTimout = -1;
+          this.isAlreadyResizing = false;
+          if (this.requeueResize) {
+            this.resize();
+            this.requeueResize = false;
+          }
+        });
+    }
   };
+
+  setIsLoading(isLoading) {
+    this.svgParts.waveforms.style.opacity = `${isLoading ? 0 : 1}`;
+  }
 
   // Web component life-cycle.
   connectedCallback() {
     if (this.isConnected) {
+      if (this.initialAttributes['resize'] === 'true') {
+        this.windowEvent = true;
+        window.addEventListener('resize', this.resize);
+      }
+
       this.store
         .getState()
-        .setAttributes(this.initialAttributes)
+        .setAttributes(this.initialAttributes, true)
         .then(() => {
           //
         });
       this.initialAttributes = {};
-      this.hasInitialised = true;
       this.resize();
+      this.hasInitialised = true;
 
       const lastTarget = { x: 0, y: 0, moved: false };
 
@@ -570,23 +625,56 @@ export class WaveformPanel extends HTMLElement {
     });
   }
 
-  // @todo batch these.
+  attributeQueue: WaveformPanelAttributes = {};
+  attributeTimeout = -1;
+  isAlreadyUpdating = false;
+  requeueUpdate = false;
+  windowEvent = false;
+
   attributeChangedCallback(name, oldValue, newValue) {
     if (this.hasInitialised) {
-      this.store
-        .getState()
-        .setAttributes({ [name]: newValue })
-        .then(() => {
-          //
-        });
+      this.attributeQueue[name] = newValue;
+      this.queueUpdate();
     } else {
       this.initialAttributes[name] = newValue;
     }
   }
 
+  queueUpdate() {
+    if (this.attributeTimeout === -1) {
+      this.attributeTimeout = setTimeout(this.updateAttributes.bind(this), 10) as any;
+    }
+    this.requeueUpdate = false;
+  }
+
+  updateAttributes() {
+    this.attributeTimeout = -1;
+    if (this.isAlreadyUpdating) {
+      this.requeueUpdate = true;
+      return;
+    }
+    if (this.hasInitialised) {
+      this.isAlreadyUpdating = true;
+      this.setIsLoading(true);
+      this.store
+        .getState()
+        .setAttributes(this.attributeQueue)
+        .then(() => {
+          this.setIsLoading(false);
+          this.isAlreadyUpdating = false;
+          if (this.requeueUpdate) {
+            this.queueUpdate();
+          }
+        });
+      this.attributeQueue = {};
+    }
+  }
+
   disconnectedCallback() {
     this.unsubscribe();
-    window.removeEventListener('resize', this.resize);
+    if (this.windowEvent) {
+      window.removeEventListener('resize', this.resize);
+    }
   }
 }
 

@@ -16,6 +16,7 @@ export interface WaveformStoreProps {
   hoverTime: number;
   bufferedSlices: any[];
   isLoading: boolean;
+  loadingProgress: number;
   dimensions: {
     pageX: number;
     pageY: number;
@@ -62,7 +63,7 @@ export interface WaveformStoreState extends WaveformStoreProps {
 
   setHover(x: number): void;
 
-  setAttributes(props: WaveformPanelAttributes): Promise<void>;
+  setAttributes(props: WaveformPanelAttributes, skipResize?: boolean): Promise<void>;
 
   resize(): Promise<void>;
 }
@@ -192,8 +193,11 @@ export function createWaveformStore(props: WaveformStoreProps) {
         }
         sequencesWithGaps.push(sequence);
       }
+      let total = sequencesWithGaps.length;
 
-      for (let sequence of sequencesWithGaps) {
+      for (let i = 0; i < sequencesWithGaps.length; i++) {
+        let sequence = sequencesWithGaps[i];
+        setState({ loadingProgress: i / total });
         const waveform = (freshState.sources || []).find((r) => {
           const matches = r.id === sequence.id;
           if (matches) {
@@ -255,11 +259,11 @@ export function createWaveformStore(props: WaveformStoreProps) {
         accumulator += endTime - startTime;
       }
       if (didChange) {
-        setState({ sequence: newSequence });
+        setState({ sequence: newSequence, loadingProgress: 0 });
       }
     },
 
-    async setAttributes(props: WaveformPanelAttributes) {
+    async setAttributes(props: WaveformPanelAttributes, skipResize = false) {
       const promises: Promise<any>[] = [];
       const state: Partial<WaveformStoreState> = { isLoading: true };
       const loaders: Record<string, any> = {};
@@ -342,7 +346,7 @@ export function createWaveformStore(props: WaveformStoreProps) {
 
       setState(state);
 
-      if (state.sources || state.sequence || state.quality) {
+      if ((state.sources || state.sequence || state.quality) && !skipResize) {
         await getState().resize();
       }
 
