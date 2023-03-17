@@ -63,9 +63,9 @@ export interface WaveformStoreState extends WaveformStoreProps {
 
   setHover(x: number): void;
 
-  setAttributes(props: WaveformPanelAttributes, skipResize?: boolean): Promise<void>;
+  setAttributes(props: WaveformPanelAttributes, skipResize: boolean, signal: () => boolean): Promise<void>;
 
-  resize(): Promise<void>;
+  resize(signal: () => boolean): Promise<void>;
 }
 
 export type WaveformStore = StoreApi<WaveformStoreState>;
@@ -143,7 +143,7 @@ export function createWaveformStore(props: WaveformStoreProps) {
       }
     },
 
-    resize: async function () {
+    resize: async function (signal: () => boolean) {
       const freshState = getState();
       // Need to rebuild our sequences.
       const newSequence: WaveformStoreState['sequence'] = [];
@@ -197,6 +197,9 @@ export function createWaveformStore(props: WaveformStoreProps) {
 
       for (let i = 0; i < sequencesWithGaps.length; i++) {
         let sequence = sequencesWithGaps[i];
+        if (signal()) {
+          return;
+        }
         setState({ loadingProgress: i / total });
         const waveform = (freshState.sources || []).find((r) => {
           const matches = r.id === sequence.id;
@@ -263,7 +266,7 @@ export function createWaveformStore(props: WaveformStoreProps) {
       }
     },
 
-    async setAttributes(props: WaveformPanelAttributes, skipResize = false) {
+    async setAttributes(props: WaveformPanelAttributes, skipResize, signal) {
       const promises: Promise<any>[] = [];
       const state: Partial<WaveformStoreState> = { isLoading: true };
       const loaders: Record<string, any> = {};
@@ -347,7 +350,7 @@ export function createWaveformStore(props: WaveformStoreProps) {
       setState(state);
 
       if ((state.sources || state.sequence || state.quality) && !skipResize) {
-        await getState().resize();
+        await getState().resize(signal);
       }
 
       if (promises.length) {
@@ -359,7 +362,7 @@ export function createWaveformStore(props: WaveformStoreProps) {
         }
         setState({ isLoading: false });
         // Now we can rebuild the sequence.
-        await getState().resize();
+        await getState().resize(signal);
         return;
       }
 

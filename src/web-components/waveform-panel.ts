@@ -473,7 +473,7 @@ export class WaveformPanel extends HTMLElement {
 
       this.store
         .getState()
-        .resize()
+        .resize(() => this.requeueResize)
         .then(() => {
           this.setIsLoading(false);
           this.resizeTimout = -1;
@@ -500,7 +500,7 @@ export class WaveformPanel extends HTMLElement {
 
       this.store
         .getState()
-        .setAttributes(this.initialAttributes, true)
+        .setAttributes(this.initialAttributes, true, () => false)
         .then(() => {
           //
         });
@@ -658,7 +658,7 @@ export class WaveformPanel extends HTMLElement {
       this.setIsLoading(true);
       this.store
         .getState()
-        .setAttributes(this.attributeQueue)
+        .setAttributes(this.attributeQueue, false, () => this.requeueUpdate)
         .then(() => {
           this.setIsLoading(false);
           this.isAlreadyUpdating = false;
