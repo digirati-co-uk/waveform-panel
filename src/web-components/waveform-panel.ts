@@ -176,6 +176,8 @@ export class WaveformPanel extends HTMLElement {
     this.svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
     this.svg.style.background = `var(--waveform-background, #000)`;
 
+    const randomId = (Math.random() + 1).toString(36).substring(2);
+
     this.svgParts = {
       loading: makeSVGElement('rect', {
         x: '0',
@@ -185,7 +187,7 @@ export class WaveformPanel extends HTMLElement {
         fill: '#fff',
         class: 'loading',
       }),
-      mask: makeSVGElement('mask', { id: 'waveform' }),
+      mask: makeSVGElement('mask', { id: 'waveform-' + randomId }),
       waveforms: makeSVGElement('g', {
         class: 'waveforms',
       }),
@@ -198,7 +200,7 @@ export class WaveformPanel extends HTMLElement {
       }),
       base: makeSVGElement('rect', {
         class: 'base',
-        mask: 'url(#waveform)',
+        mask: 'url(#waveform-' + randomId + ')',
         x: '0px',
         y: '0px',
         width: `100%`,
@@ -206,7 +208,7 @@ export class WaveformPanel extends HTMLElement {
       }),
       progress: makeSVGElement('rect', {
         class: 'progress',
-        mask: 'url(#waveform)',
+        mask: 'url(#waveform-' + randomId + ')',
         x: '0px',
         y: '0px',
         width: `0px`,
@@ -214,7 +216,7 @@ export class WaveformPanel extends HTMLElement {
       }),
       hover: makeSVGElement('rect', {
         class: 'hover',
-        mask: 'url(#waveform)',
+        mask: 'url(#waveform-' + randomId + ')',
         x: '0px',
         y: '0px',
         height: `100%`,
