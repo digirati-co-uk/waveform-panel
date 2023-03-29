@@ -13,33 +13,34 @@
 
 <waveform-panel
   id='wp'
+  resize='true'
   quality='1.2'
   srcset='https://iiif-waveforms.s3.eu-west-2.amazonaws.com/vdc_100052359795.0x000018.dat https://api.bl.uk/metadata/iiif/ark:/81055/vdc_100052359795.0x000004,https://iiif-waveforms.s3.eu-west-2.amazonaws.com/vdc_100052359795.0x00001a.dat https://api.bl.uk/metadata/iiif/ark:/81055/vdc_100052359795.0x000005'
   duration='3723' sequence='https://api.bl.uk/metadata/iiif/ark:/81055/vdc_100052359795.0x000004#t=0,3723.4'
   style='height: 300px;'></waveform-panel>
-<button id="c1">Change 1</button>
-<button id="c2">Change 2</button>
-<input type="range" id='r1' min='0' max='1000' step='10'/>
+<button id='c1'>Change 1</button>
+<button id='c2'>Change 2</button>
+<input type='range' id='r1' min='0' max='1000' step='10' />
 <script>
   let per = 1000;
   const wp = document.getElementById('wp');
-  const c1 = document.getElementById('c1')
-  const c2 = document.getElementById('c2')
-  const r1 = document.getElementById('r1')
+  const c1 = document.getElementById('c1');
+  const c2 = document.getElementById('c2');
+  const r1 = document.getElementById('r1');
 
   r1.addEventListener('change', e => {
     console.log(e.target.valueAsNumber);
-    wp.setAttribute('sequence', `https://api.bl.uk/metadata/iiif/ark:/81055/vdc_100052359795.0x000005#t=${e.target.valueAsNumber},${e.target.valueAsNumber+1000}`);
-  })
+    wp.setAttribute('sequence', `https://api.bl.uk/metadata/iiif/ark:/81055/vdc_100052359795.0x000005#t=${e.target.valueAsNumber},${e.target.valueAsNumber + 1000}`);
+  });
 
   c1.addEventListener('click', e => {
     wp.setAttribute('duration', '1000');
     wp.setAttribute('sequence', 'https://api.bl.uk/metadata/iiif/ark:/81055/vdc_100052359795.0x000005#t=0,1000');
-  })
+  });
   c2.addEventListener('click', e => {
     wp.setAttribute('duration', '1000');
     wp.setAttribute('sequence', 'https://api.bl.uk/metadata/iiif/ark:/81055/vdc_100052359795.0x000005#t=200,1200');
-  })
+  });
 
 </script>
 
@@ -105,16 +106,16 @@
 </div>
 
 <waveform-panel
-  srcset="
+  srcset='
     https://iiif-waveforms.s3.eu-west-2.amazonaws.com/vdc_100052359795.0x000018.dat first#t=0,50    |
     https://iiif-waveforms.s3.eu-west-2.amazonaws.com/vdc_100052359795.0x00001a.dat first#t=50,100  |
     https://iiif-waveforms.s3.eu-west-2.amazonaws.com/vdc_100052359795.0x000018.dat first#t=101,150  |
     https://iiif-waveforms.s3.eu-west-2.amazonaws.com/vdc_100052359795.0x00001a.dat second           |
-  "
-  sequence="
+  '
+  sequence='
     first#t=0,100 |
     second#t=0,400
-  "
+  '
 ></waveform-panel>
 
 <style>
@@ -310,7 +311,20 @@
                   https://api-beta.bl.uk/metadata/iiif/ark:/81055/vdc_100078951447.0x00000a#t=1022.88,1023.48 |
                   https://api-beta.bl.uk/metadata/iiif/ark:/81055/vdc_100078951447.0x00000a#t=1023.48,1269.8 |
                   https://api-beta.bl.uk/metadata/iiif/ark:/81055/vdc_100078951447.0x00000b#t=3.64,235.16 '
-                 current-time='0'></waveform-panel>
+                current-time='0'></waveform-panel>
+
+<waveform-panel class='waveform-panel'
+                srcset='
+                  https://api-beta.bl.uk/waveform/vdc_100078951447.0x0000aa https://api-beta.bl.uk/metadata/iiif/ark:/81055/vdc_100078951447.0x000004#t=0,1141|
+                  https://api-beta.bl.uk/waveform/vdc_100078951447.0x0000ac https://api-beta.bl.uk/metadata/iiif/ark:/81055/vdc_100078951447.0x000004#t=0,189|
+                  https://api-beta.bl.uk/waveform/vdc_100078951447.0x0000ae https://api-beta.bl.uk/metadata/iiif/ark:/81055/vdc_100078951447.0x000004#t=0,1361|
+                  https://api-beta.bl.uk/waveform/vdc_100078951447.0x0000c2 https://api-beta.bl.uk/metadata/iiif/ark:/81055/vdc_100078951447.0x000004#t=0,192'
+                duration='2883'
+                sequence='https://api-beta.bl.uk/metadata/iiif/ark:/81055/vdc_100078951447.0x000004#t=0,1141|
+                https://api-beta.bl.uk/metadata/iiif/ark:/81055/vdc_100078951447.0x000004#t=0,189|
+                https://api-beta.bl.uk/metadata/iiif/ark:/81055/vdc_100078951447.0x000004#t=0,1361|
+                https://api-beta.bl.uk/metadata/iiif/ark:/81055/vdc_100078951447.0x000004#t=0,192'
+                style='height: 100%;' current-time='0'></waveform-panel>
 
 </body>
 </html>

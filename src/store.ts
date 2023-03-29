@@ -16,6 +16,7 @@ export interface WaveformStoreProps {
   hoverTime: number;
   bufferedSlices: any[];
   isLoading: boolean;
+  loadingProgress: number;
   dimensions: {
     pageX: number;
     pageY: number;
@@ -62,9 +63,9 @@ export interface WaveformStoreState extends WaveformStoreProps {
 
   setHover(x: number): void;
 
-  setAttributes(props: WaveformPanelAttributes): Promise<void>;
+  setAttributes(props: WaveformPanelAttributes, skipResize: boolean, signal: () => boolean): Promise<void>;
 
-  resize(): Promise<void>;
+  resize(signal: () => boolean): Promise<void>;
 }
 
 export type WaveformStore = StoreApi<WaveformStoreState>;
@@ -109,8 +110,6 @@ export function createWaveformStore(props: WaveformStoreProps) {
           dpi,
         },
       });
-
-      getState().resize(); // Let this kick off in the background
     },
 
     setHover(x: number) {
@@ -144,7 +143,7 @@ export function createWaveformStore(props: WaveformStoreProps) {
       }
     },
 
-    resize: async function () {
+    resize: async function (signal: () => boolean) {
       const freshState = getState();
       // Need to rebuild our sequences.
       const newSequence: WaveformStoreState['sequence'] = [];
@@ -181,8 +180,8 @@ export function createWaveformStore(props: WaveformStoreProps) {
           const toSplit = sequence;
           for (let i = 0; i < requiredWaveforms.length; i++) {
             const waveform = requiredWaveforms[i];
-            const start = Math.max(toSplit.startTime, waveform.segment.start);
-            const end = Math.min(toSplit.endTime, waveform.segment.end);
+            const start = waveform.segment ? Math.max(toSplit.startTime, waveform.segment.start) : toSplit.startTime;
+            const end = waveform.segment ? Math.min(toSplit.endTime, waveform.segment.end) : toSplit.endTime;
             sequencesWithGaps.push({
               ...toSplit,
               source: toSplit.id + '__' + start + '__' + end,
@@ -194,8 +193,14 @@ export function createWaveformStore(props: WaveformStoreProps) {
         }
         sequencesWithGaps.push(sequence);
       }
+      let total = sequencesWithGaps.length;
 
-      for (let sequence of sequencesWithGaps) {
+      for (let i = 0; i < sequencesWithGaps.length; i++) {
+        let sequence = sequencesWithGaps[i];
+        if (signal()) {
+          return;
+        }
+        setState({ loadingProgress: i / total });
         const waveform = (freshState.sources || []).find((r) => {
           const matches = r.id === sequence.id;
           if (matches) {
@@ -209,9 +214,11 @@ export function createWaveformStore(props: WaveformStoreProps) {
 
         const startTime = waveform.segment ? sequence.startTime - waveform.segment.start : sequence.startTime;
         const endTime = waveform.segment ? sequence.endTime - waveform.segment.start : sequence.endTime;
+        const duration = endTime - startTime;
+        if (duration <= 0) continue;
 
         if (waveform && waveform.data && freshState.dimensions.width) {
-          const quality = freshState.quality;
+          let quality = freshState.quality;
           //
           // 1. Re-sample.
           const sequenceLengthSeconds = (endTime || waveform.data.duration) - (startTime || 0);
@@ -219,18 +226,35 @@ export function createWaveformStore(props: WaveformStoreProps) {
           const visualWidth = freshState.dimensions.width * sequencePercent;
           const percentOfWaveformShown = Math.min(1, sequenceLengthSeconds / waveform.data.duration);
           const startPixel = (accumulator / freshState.duration) * freshState.dimensions.width;
-          const data = waveform.data.resample({ width: quality * visualWidth * (1 / percentOfWaveformShown) });
-          didChange = true;
-          newSequence.push({
-            ...sequence,
-            waveform: {
-              data,
-              atWidth: visualWidth,
-              startPixel,
-              quality,
-              segment: waveform.segment,
-            },
-          });
+
+          let newWidth = quality * visualWidth * (1 / percentOfWaveformShown);
+          const newScale = Math.floor((waveform.data.duration * waveform.data.sample_rate) / newWidth);
+
+          if (newScale < waveform.data.scale) {
+            quality *= newScale / waveform.data.scale;
+            newWidth = quality * visualWidth * (1 / percentOfWaveformShown);
+            console.warn('Selected quality too high, or segment too small', { quality, newWidth });
+          }
+
+          try {
+            const data = waveform.data.resample({ width: newWidth });
+            // Unblock the thread.
+            await new Promise((resolve) => setTimeout(resolve, 0));
+
+            didChange = true;
+            newSequence.push({
+              ...sequence,
+              waveform: {
+                data,
+                atWidth: visualWidth,
+                startPixel,
+                quality,
+                segment: waveform.segment,
+              },
+            });
+          } catch (e) {
+            console.error(e);
+          }
         } else {
           newSequence.push(sequence);
         }
@@ -238,11 +262,11 @@ export function createWaveformStore(props: WaveformStoreProps) {
         accumulator += endTime - startTime;
       }
       if (didChange) {
-        setState({ sequence: newSequence });
+        setState({ sequence: newSequence, loadingProgress: 0 });
       }
     },
 
-    async setAttributes(props: WaveformPanelAttributes) {
+    async setAttributes(props: WaveformPanelAttributes, skipResize, signal) {
       const promises: Promise<any>[] = [];
       const state: Partial<WaveformStoreState> = { isLoading: true };
       const loaders: Record<string, any> = {};
@@ -325,8 +349,8 @@ export function createWaveformStore(props: WaveformStoreProps) {
 
       setState(state);
 
-      if (state.sources || state.sequence || state.quality) {
-        await getState().resize();
+      if ((state.sources || state.sequence || state.quality) && !skipResize) {
+        await getState().resize(signal);
       }
 
       if (promises.length) {
@@ -338,7 +362,7 @@ export function createWaveformStore(props: WaveformStoreProps) {
         }
         setState({ isLoading: false });
         // Now we can rebuild the sequence.
-        await getState().resize();
+        await getState().resize(signal);
         return;
       }
 

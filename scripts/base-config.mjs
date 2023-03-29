@@ -31,5 +31,6 @@ export function defineConfig(options) {
         },
       },
     },
+    define: options.define,
   };
 }

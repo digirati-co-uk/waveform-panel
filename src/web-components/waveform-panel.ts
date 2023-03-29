@@ -9,6 +9,7 @@ export interface WaveformPanelProps {
   sequence: Array<{ id: string; startTime: number; endTime: number }>;
   duration: number;
   quality: number;
+  resize: 'true' | 'false';
   'current-time': number;
 }
 
@@ -25,6 +26,7 @@ export class WaveformPanel extends HTMLElement {
   };
   svg!: SVGElement;
   svgParts!: {
+    loading: SVGRectElement;
     mask: SVGMaskElement;
     waveforms: SVGGElement;
     maskBg: SVGRectElement;
@@ -32,6 +34,7 @@ export class WaveformPanel extends HTMLElement {
     progress: SVGRectElement;
     hover: SVGRectElement;
     buffered: SVGGElement;
+    line: SVGGElement;
   };
   buffered?: Record<string, TimeRanges>;
   waveformCache: Record<string, WaveformData> = {};
@@ -43,22 +46,43 @@ export class WaveformPanel extends HTMLElement {
     const style = document.createElement('style');
     // language=CSS
     style.innerHTML = `
-      :host {
-        display: block;
-        --waveform-background: #000;
-        --waveform-base: #8a9aa1;
-        --waveform-hover: #14a4c3;
-        --waveform-buffered: #fff;
-        --waveform-progress: rgba(255, 255, 255, .4);
-      }
-      svg { background: var(--waveform-background, #000); }
-      svg rect.hover { fill: var(--waveform-hover, #14a4c3); }
-      svg rect.base { fill: var(--waveform-base, #8a9aa1); }
-      svg rect.progress { fill: var(--waveform-progress, #14a4c3); }
-      svg .buffered rect { fill: var(--waveform-buffered, #fff); }
-    `;
+        :host {
+            display: block;
+            --waveform-background: #000;
+            --waveform-base: #8a9aa1;
+            --waveform-hover: #14a4c3;
+            --waveform-buffered: #fff;
+            --waveform-progress: rgba(255, 255, 255, .4);
+        }
 
-    window.addEventListener('resize', this.resize);
+        svg {
+            background: var(--waveform-background, #000);
+        }
+
+        svg .waveforms {
+            transition: opacity 140ms;
+        }
+
+        svg rect.hover {
+            fill: var(--waveform-hover, #14a4c3);
+        }
+
+        svg rect.base {
+            fill: var(--waveform-base, #8a9aa1);
+        }
+
+        svg rect.progress {
+            fill: var(--waveform-progress, #14a4c3);
+        }
+
+        svg .buffered rect {
+            fill: var(--waveform-buffered, #fff);
+        }
+
+        svg .loading {
+            translate: 0px -0.5px;
+        }
+    `;
 
     this.store = createWaveformStore({} as any);
 
@@ -70,6 +94,15 @@ export class WaveformPanel extends HTMLElement {
     this.unsubscribe = this.store.subscribe((state, prevState) => {
       if (state.sequence !== prevState.sequence) {
         this.invalidation.sequence = true;
+      }
+
+      if (state.isLoading !== prevState.isLoading) {
+        this.setIsLoading(state.isLoading);
+      }
+      if (state.loadingProgress !== prevState.loadingProgress) {
+        if (this.svgParts.loading) {
+          this.svgParts.loading.style.width = `${state.loadingProgress * 100}%`;
+        }
       }
 
       if (state.dimensions !== prevState.dimensions) {
@@ -143,8 +176,18 @@ export class WaveformPanel extends HTMLElement {
     this.svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
     this.svg.style.background = `var(--waveform-background, #000)`;
 
+    const randomId = (Math.random() + 1).toString(36).substring(2);
+
     this.svgParts = {
-      mask: makeSVGElement('mask', { id: 'waveform' }),
+      loading: makeSVGElement('rect', {
+        x: '0',
+        y: '50%',
+        width: '',
+        height: '1',
+        fill: '#fff',
+        class: 'loading',
+      }),
+      mask: makeSVGElement('mask', { id: 'waveform-' + randomId }),
       waveforms: makeSVGElement('g', {
         class: 'waveforms',
       }),
@@ -157,7 +200,7 @@ export class WaveformPanel extends HTMLElement {
       }),
       base: makeSVGElement('rect', {
         class: 'base',
-        mask: 'url(#waveform)',
+        mask: 'url(#waveform-' + randomId + ')',
         x: '0px',
         y: '0px',
         width: `100%`,
@@ -165,7 +208,7 @@ export class WaveformPanel extends HTMLElement {
       }),
       progress: makeSVGElement('rect', {
         class: 'progress',
-        mask: 'url(#waveform)',
+        mask: 'url(#waveform-' + randomId + ')',
         x: '0px',
         y: '0px',
         width: `0px`,
@@ -173,13 +216,18 @@ export class WaveformPanel extends HTMLElement {
       }),
       hover: makeSVGElement('rect', {
         class: 'hover',
-        mask: 'url(#waveform)',
+        mask: 'url(#waveform-' + randomId + ')',
         x: '0px',
         y: '0px',
         height: `100%`,
       }),
       buffered: makeSVGElement('g', {
         class: 'buffered',
+      }),
+      line: makeSVGElement('line', {
+        class: 'waveform-line',
+        x1: '0px',
+        stroke: '#999',
       }),
     };
 
@@ -205,6 +253,7 @@ export class WaveformPanel extends HTMLElement {
 
     this.svgParts.mask.appendChild(this.svgParts.maskBg);
     this.svgParts.mask.appendChild(this.svgParts.waveforms);
+    this.svgParts.waveforms.appendChild(this.svgParts.line);
     const defs = makeSVGElement('defs', {});
     defs.appendChild(this.svgParts.mask);
 
@@ -213,16 +262,21 @@ export class WaveformPanel extends HTMLElement {
     this.svg.appendChild(this.svgParts.buffered);
     this.svg.appendChild(this.svgParts.hover);
     this.svg.appendChild(this.svgParts.progress);
+    this.svg.appendChild(this.svgParts.loading);
   }
 
   resizeSVG() {
     const dimensions = this.store.getState().dimensions;
 
-    this.svgParts.waveforms.setAttributeNS(null, 'x', `-${this.store.getState().dimensions.height / 2}px`);
+    // this.svgParts.waveforms.setAttributeNS(null, 'x', `-${this.store.getState().dimensions.height / 2}px`);
     this.svgParts.maskBg.setAttributeNS(null, 'width', `${dimensions.width}px`);
     this.svgParts.base.setAttributeNS(null, 'height', `${dimensions.height}px`);
     this.svgParts.progress.setAttributeNS(null, 'height', `${dimensions.height}px`);
     this.svgParts.hover.setAttributeNS(null, 'height', `${dimensions.height}px`);
+
+    this.svgParts.line.setAttributeNS(null, 'x2', `${dimensions.width}px`);
+    this.svgParts.line.setAttributeNS(null, 'y1', `${dimensions.height / 2}px`);
+    this.svgParts.line.setAttributeNS(null, 'y2', `${dimensions.height / 2}px`);
   }
 
   addSequenceToSVG(sequence: WaveformSequence) {
@@ -237,20 +291,29 @@ export class WaveformPanel extends HTMLElement {
     const startTime = sequence.waveform.segment
       ? sequence.startTime - sequence.waveform.segment.start
       : sequence.startTime;
-    const endTime = sequence.waveform.segment ? sequence.endTime - sequence.waveform.segment.start : sequence.endTime;
+    let endTime = sequence.waveform.segment ? sequence.endTime - sequence.waveform.segment.start : sequence.endTime;
+    if (endTime > waveform.duration) {
+      console.warn('Data does not match waveform duration', { overflow: endTime - waveform.duration });
+      endTime = waveform.duration - 0.01;
+    }
+
     const start = ~~(waveform.pixels_per_second * startTime);
     const duration = ~~(waveform.pixels_per_second * (endTime - startTime));
     const end = start + duration;
 
-    const h = this.store.getState().dimensions.height * 1.5;
+    const h = this.store.getState().dimensions.height;
     const points = [];
     let didError = false;
     let lastError;
+    const maxSamples = [];
+    const minSamples = [];
+
     for (let x = start; x < end; x++) {
       try {
-        const val = channel.max_sample(x);
-        const _x = (x - start) / (sequence.waveform.quality || 1);
-        points.push([sequence.waveform.startPixel + (_x === 0 ? -2 : _x + 0.5), scaleY(val, h) + 0.5]);
+        const max = channel.max_sample(x);
+        if (Number.isSafeInteger(max)) {
+          maxSamples[x] = max;
+        }
       } catch (e) {
         lastError = e;
         didError = true;
@@ -259,12 +322,36 @@ export class WaveformPanel extends HTMLElement {
 
     for (let x = end; x >= start; x--) {
       try {
-        const val = channel.min_sample(x);
-        const _x = (x - start) / (sequence.waveform.quality || 1);
-        points.push([sequence.waveform.startPixel + (_x === 0 ? -2 : _x + 0.5), scaleY(val, h) + 0.5]);
+        const min = channel.min_sample(x);
+        if (Number.isSafeInteger(min)) {
+          minSamples[x] = min;
+        }
       } catch (e) {
         lastError = e;
         didError = true;
+      }
+    }
+
+    if (maxSamples.length === 0 || minSamples.length === 0) {
+      return;
+    }
+
+    const maxFactor = Math.max(0, ...maxSamples.filter((t) => typeof t !== 'undefined')) * 2.5;
+    const minFactor = Math.abs(Math.min(...minSamples.filter((t) => typeof t !== 'undefined'))) * 2.5;
+
+    for (let x = start; x < end; x++) {
+      const val = maxSamples[x];
+      if (typeof val !== 'undefined') {
+        const _x = (x - start) / (sequence.waveform.quality || 1);
+        points.push([sequence.waveform.startPixel + (_x === 0 ? -2 : _x + 0.5), scaleY(val, h, maxFactor + 1) + 0.5]);
+      }
+    }
+
+    for (let x = end; x >= start; x--) {
+      const val = minSamples[x];
+      if (typeof val !== 'undefined') {
+        const _x = (x - start) / (sequence.waveform.quality || 1);
+        points.push([sequence.waveform.startPixel + (_x === 0 ? -2 : _x + 0.5), scaleY(val, h, minFactor + 1) + 0.5]);
       }
     }
 
@@ -273,6 +360,7 @@ export class WaveformPanel extends HTMLElement {
         console.error(lastError);
       }
       console.error('Error rendering waveform', channel, sequence);
+      console.log('Debug component', this.outerHTML);
     }
 
     const mappedPoints = points.map((p) => p.join(',')).join(' ');
@@ -343,34 +431,84 @@ export class WaveformPanel extends HTMLElement {
   }
 
   static get observedAttributes(): Array<keyof WaveformPanelAttributes> {
-    return ['src', 'srcset', 'duration', 'quality', 'sequence', 'current-time'];
+    return ['src', 'srcset', 'duration', 'quality', 'sequence', 'current-time', 'resize'];
   }
 
+  lastWidth = -1;
+  lastHeight = -1;
+  resizeTimout = -1;
+  requeueResize = false;
+
   resize = () => {
+    if (this.resizeTimout === -1) {
+      this.resizeTimout = setTimeout(this.forceResize, 0) as any;
+    }
+  };
+  isAlreadyResizing = false;
+
+  forceResize = () => {
+    this.resizeTimout = -1;
+
     const box = this.getBoundingClientRect();
     const dpi = window.devicePixelRatio || 1;
     this.store.getState().setDimensions(box, dpi);
 
     const { width, height } = this.getBoundingClientRect();
 
+    this.lastWidth = width;
+    this.lastHeight = height;
+
     this.svg.setAttributeNS(null, 'height', `${height}px`);
     this.svg.setAttributeNS(null, 'width', `100%`);
     this.svg.setAttributeNS(null, 'preserveAspectRatio', `none`);
-    this.svg.setAttributeNS(null, 'viewBox', `0 ${height / 2.5} ${width} ${height / 1.5}`);
+    this.svg.setAttributeNS(null, 'viewBox', `0 0 ${width} ${height}`);
+
+    if (this.hasInitialised) {
+      if (this.isAlreadyResizing) {
+        this.requeueResize = true;
+        return;
+      }
+
+      this.isAlreadyResizing = true;
+
+      this.setIsLoading(true);
+
+      this.store
+        .getState()
+        .resize(() => this.requeueResize)
+        .then(() => {
+          this.setIsLoading(false);
+          this.resizeTimout = -1;
+          this.isAlreadyResizing = false;
+          if (this.requeueResize) {
+            this.resize();
+            this.requeueResize = false;
+          }
+        });
+    }
   };
+
+  setIsLoading(isLoading) {
+    this.svgParts.waveforms.style.opacity = `${isLoading ? 0 : 1}`;
+  }
 
   // Web component life-cycle.
   connectedCallback() {
     if (this.isConnected) {
+      if (this.initialAttributes['resize'] === 'true') {
+        this.windowEvent = true;
+        window.addEventListener('resize', this.resize);
+      }
+
       this.store
         .getState()
-        .setAttributes(this.initialAttributes)
+        .setAttributes(this.initialAttributes, true, () => false)
         .then(() => {
           //
         });
       this.initialAttributes = {};
-      this.hasInitialised = true;
       this.resize();
+      this.hasInitialised = true;
 
       const lastTarget = { x: 0, y: 0, moved: false };
 
@@ -489,22 +627,56 @@ export class WaveformPanel extends HTMLElement {
     });
   }
 
+  attributeQueue: WaveformPanelAttributes = {};
+  attributeTimeout = -1;
+  isAlreadyUpdating = false;
+  requeueUpdate = false;
+  windowEvent = false;
+
   attributeChangedCallback(name, oldValue, newValue) {
     if (this.hasInitialised) {
-      this.store
-        .getState()
-        .setAttributes({ [name]: newValue })
-        .then(() => {
-          //
-        });
+      this.attributeQueue[name] = newValue;
+      this.queueUpdate();
     } else {
       this.initialAttributes[name] = newValue;
     }
   }
 
+  queueUpdate() {
+    if (this.attributeTimeout === -1) {
+      this.attributeTimeout = setTimeout(this.updateAttributes.bind(this), 10) as any;
+    }
+    this.requeueUpdate = false;
+  }
+
+  updateAttributes() {
+    this.attributeTimeout = -1;
+    if (this.isAlreadyUpdating) {
+      this.requeueUpdate = true;
+      return;
+    }
+    if (this.hasInitialised) {
+      this.isAlreadyUpdating = true;
+      this.setIsLoading(true);
+      this.store
+        .getState()
+        .setAttributes(this.attributeQueue, false, () => this.requeueUpdate)
+        .then(() => {
+          this.setIsLoading(false);
+          this.isAlreadyUpdating = false;
+          if (this.requeueUpdate) {
+            this.queueUpdate();
+          }
+        });
+      this.attributeQueue = {};
+    }
+  }
+
   disconnectedCallback() {
     this.unsubscribe();
-    window.removeEventListener('resize', this.resize);
+    if (this.windowEvent) {
+      window.removeEventListener('resize', this.resize);
+    }
   }
 }
 

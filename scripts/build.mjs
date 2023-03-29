@@ -4,6 +4,17 @@ import chalk from 'chalk';
 import { execa } from 'execa';
 
 (async () => {
+  let desc = '';
+
+  try {
+    desc = (await execa('git', ['describe', '--tags'])).stdout;
+  } catch (e) {
+    //
+  }
+
+  const define = {
+    '__GIT_TAG__': JSON.stringify(desc),
+  };
 
   const DIST = 'dist';
 
@@ -15,6 +26,7 @@ import { execa } from 'execa';
       name: 'index',
       outDir: DIST,
       globalName: 'WaveformPanel',
+      define,
     })
   );
 
@@ -24,6 +36,7 @@ import { execa } from 'execa';
       entry: `src/index.ts`,
       name: 'index',
       outDir: `${DIST}/bundle`,
+      define,
     })
   );
 
@@ -34,6 +47,7 @@ import { execa } from 'execa';
       name: 'index',
       outDir: `${DIST}/standalone`,
       external: ['waveform-data', 'zustand/vanilla'],
+      define,
     })
   );
 

@@ -62,3 +62,9 @@
 // - Add buffering mechanisms
 
 export * from './web-components/waveform-panel';
+
+// @ts-ignore
+if (typeof __GIT_TAG__ !== 'undefined') {
+  // @ts-ignore
+  console.log(`<waveform-panel /> version ${__GIT_TAG__}`);
+}
